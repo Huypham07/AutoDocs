@@ -2,32 +2,32 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 from app.core.logging import setup_logging
-from app.schemas.repo import RepoFetchingRequest
+from app.schemas.chat_message import ChatCompletionRequest
 from app.core.db_manager import DBManager
-import hashlib
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.post("/repo/fetch")
-async def handle_repo_fetching(request: RepoFetchingRequest):
-    """Handle repository fetching requests"""
+@router.post("/streaming/completion")
+async def handle_streaming_completion(request: ChatCompletionRequest):
+    """Handle streaming completion requests"""
     try:
         db_manager = DBManager()
         
         db_manager.prepare_db(
             repo_url=str(request.repo_url),
-            access_token=request.access_token if request.access_token else None
+            access_token=request.access_token
         )
     
         return {
-            "hash_id": hashlib.sha256(str(request.repo_url).encode()).hexdigest(), 
+            "status": "success",
+            "message": "Streaming completion started successfully."
         }
     except HTTPException:
         raise
     except Exception as e_handler:
-        error_msg = f"Error in repo fetching: {str(e_handler)}"
+        error_msg = f"Error in streaming chat completion: {str(e_handler)}"
         logger.error(error_msg)
         raise HTTPException(status_code=500, detail=error_msg)

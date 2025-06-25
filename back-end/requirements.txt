@@ -6,3 +6,8 @@ pydantic>=2.0.0
 pydantic-settings>=2.0.0
 adalflow>=0.1.0
 pytest
+faiss-cpu>=1.7.4
+google-generativeai>=0.3.0
+jinja2>=3.1.2
+openai>=1.76.2
+ollama>=0.4.8
