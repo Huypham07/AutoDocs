@@ -1,13 +1,9 @@
 from pydantic import BaseModel, Field, HttpUrl
-from typing import List, Optional
+from typing import Optional
 
-class ChatMessage(BaseModel):
-    role: str  # 'user' or 'assistant'
-    content: str
-
-class ChatCompletionRequest(BaseModel):
+class TaskRequest(BaseModel):
     """
-    Schemas for requesting a chat completion
+    Schemas for repo fetching
     """
     repo_url: HttpUrl = Field(..., description="URL of the repository")
     access_token: Optional[str] = Field(None, description="Access token for private repository")

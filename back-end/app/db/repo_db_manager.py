@@ -16,21 +16,26 @@ from app.core.logging import setup_logging
 from urllib.parse import urlparse, urlunparse
 from app.core.config import *
 from app.core.llm.ollama_processor import *
+from app.services.docsgen.util import extract_full_repo_name
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
-def count_tokens(text: str) -> int:
+def count_tokens(text: str, is_ollama_embedder: bool = True) -> int:
     """
-    Count the number of tokens.
+    Count the number of tokens in a text string using tiktoken.
     """
     try:
-        encoding = tiktoken.get_encoding("cl100k_base")
+        if is_ollama_embedder:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        else:
+            encoding = tiktoken.encoding_for_model("text-embedding-3-small")
 
         return len(encoding.encode(text))
     except Exception as e:
         # Fallback to a simple approximation if tiktoken fails
         logger.warning(f"Error counting tokens with tiktoken: {e}")
+        # Rough approximation: 4 characters per token
         return len(text) // 4
 
 
@@ -215,7 +220,7 @@ class DBManager:
                         )
 
                         # Check token count
-                        token_count = count_tokens(content)
+                        token_count = count_tokens(content, is_ollama_embedder=True)
                         if token_count > MAX_EMBEDDING_TOKENS * 10:
                             logger.warning(f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit")
                             continue
@@ -249,7 +254,7 @@ class DBManager:
                         relative_path = os.path.relpath(file_path, path)
 
                         # Check token count
-                        token_count = count_tokens(content)
+                        token_count = count_tokens(content, is_ollama_embedder=True)
                         if token_count > MAX_EMBEDDING_TOKENS:
                             logger.warning(f"Skipping large file {relative_path}: Token count ({token_count}) exceeds limit")
                             continue
@@ -445,7 +450,7 @@ class DBManager:
             os.makedirs(root_path, exist_ok=True)
             
             # get repo name
-            repo_name = self._extract_repo_name(repo_url)
+            repo_name = extract_full_repo_name(repo_url)
             logger.info(f"Successfully extracted repo name: {repo_name}")
             
             repo_dir = os.path.join(root_path, "repos", repo_name)

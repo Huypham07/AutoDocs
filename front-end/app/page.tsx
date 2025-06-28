@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Github, Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { RepoFetchBody } from "@/schemas/repo.schema";
+import { TaskBody, TaskResponse } from "@/schemas/task.schema";
 
 export default function AutoDocs() {
   const [repoUrl, setRepoUrl] = useState("https://github.com/Huypham07/AutoDocs");
@@ -18,6 +18,7 @@ export default function AutoDocs() {
   const [showAccessToken, setShowAccessToken] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [streamingContent, setStreamingContent] = useState("");
 
   const router = useRouter();
 
@@ -25,17 +26,18 @@ export default function AutoDocs() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    setStreamingContent("");
 
     try {
       // get base URL from env
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "localhost:8000";
 
-      const requestBody: RepoFetchBody = {
+      const requestBody: TaskBody = {
         repo_url: repoUrl,
         ...(accessToken && { access_token: accessToken }),
       };
 
-      const response = await fetch(`/api/repo/fetch`, {
+      const response = await fetch(`/api/documents`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -67,10 +69,34 @@ export default function AutoDocs() {
         throw new Error(errorMessage);
       }
 
-      const responseData = await response.json();
-      const hash_id = responseData.hash_id;
+      // Process the response
+      let content = "";
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      router.push(`/docs/${hash_id}`);
+      if (!reader) {
+        throw new Error("Failed to get response reader");
+      }
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          content += chunk;
+
+          // Update streaming responses - only keep last 2 lines
+          setStreamingContent((prev) => prev + chunk);
+        }
+        // Ensure final decoding
+        content += decoder.decode();
+      } catch (readError) {
+        console.error("Error reading stream:", readError);
+        throw new Error("Error processing response stream");
+      }
+
+      // Redirect to the documentation page with owner and repo as query parameters
+      // router.push(`/generate/${owner}/${repo_name}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(errorMessage);
@@ -92,6 +118,7 @@ export default function AutoDocs() {
     setError("");
     setShowAccessToken(false);
     setAccessToken("");
+    setStreamingContent("");
   };
 
   return (
@@ -170,6 +197,43 @@ export default function AutoDocs() {
               )}
             </Button>
           </form>
+
+          {/* Streaming Response Display */}
+          {streamingContent && (
+            <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="space-y-1">
+                {(() => {
+                  // Split content into lines and get last 2 lines
+                  const lines = streamingContent.split("\n").filter((line) => line.trim());
+                  const lastTwoLines = lines.slice(-2);
+
+                  return lastTwoLines.map((line, index) =>
+                    line.includes("Error:") ? (
+                      <div
+                        key={`${lines.length}-${index}`}
+                        className={`text-sm transition-opacity duration-500 ${
+                          index === lastTwoLines.length - 1
+                            ? "text-red-600 opacity-80 text-sm"
+                            : "text-red-400 opacity-50 text-xs"
+                        }`}>
+                        {line.trim()}
+                      </div>
+                    ) : (
+                      <div
+                        key={`${lines.length}-${index}`}
+                        className={`transition-opacity duration-500 overflow-x-hidden whitespace-nowrap truncate overflow-ellipsis${
+                          index === lastTwoLines.length - 1
+                            ? "text-gray-600 opacity-80 text-sm"
+                            : "text-gray-400 opacity-50 text-xs"
+                        }`}>
+                        {line.trim()}
+                      </div>
+                    )
+                  );
+                })()}
+              </div>
+            </div>
+          )}
 
           {showAccessToken && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">

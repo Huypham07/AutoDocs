@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from app.core.db_manager import DBManager
+from app.db.repo_db_manager import DBManager
 import subprocess
 
 def test_extract_repo_name():

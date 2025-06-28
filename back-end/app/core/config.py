@@ -9,7 +9,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 try:
-    from adalflow import OllamaClient
+    from adalflow import OllamaClient, GoogleGenAIClient
 except ImportError as e:
     logger.warning(f"Some client imports failed: {e}")
     # Define empty classes as fallbacks
@@ -79,6 +79,62 @@ EMBEDDER_CONFIG = {
     }
 }
 
+GENERATOR_CONFIG = {
+  "default_provider": "google",
+  "providers": {
+    "google": {
+    
+      "default_model": "gemini-2.0-flash",
+      "supportsCustomModel": True,
+      "models": {
+        "gemini-2.0-flash": {
+          "temperature": 0.7,
+          "top_p": 0.8,
+          "top_k": 20
+        },
+        "gemini-2.5-flash-preview-05-20": {
+          "temperature": 0.7,
+          "top_p": 0.8,
+          "top_k": 20
+        },
+        "gemini-2.5-pro-preview-03-25": {
+          "temperature": 0.7,
+          "top_p": 0.8,
+          "top_k": 20
+        }
+      }
+    },
+    "ollama": {
+      "default_model": "qwen3:1.7b",
+      "supportsCustomModel": True,
+      "models": {
+        "qwen3:1.7b": {
+          "options": {
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "num_ctx": 32000
+          }
+        },
+        "llama3:8b": {
+          "options": {
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "num_ctx": 8000
+          }
+        },
+        "qwen3:8b": {
+          "options": {
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "num_ctx": 32000
+          }
+        }
+      }
+    },
+  }
+}
+
+
 def replace_env_placeholders(config: Union[Dict[str, Any], List[Any], str, Any]) -> Union[Dict[str, Any], List[Any], str, Any]:
     """
     Recursively replace placeholders like "${ENV_VAR}" in string values
@@ -117,6 +173,23 @@ def load_embedder_configs():
         if key in embedder_config:
             configs[key] = embedder_config[key]
             
+def load_generator_config():
+    generator_config = replace_env_placeholders(GENERATOR_CONFIG.copy())
+
+    # Add client classes to each provider
+    if "providers" in generator_config:
+        for provider_id, provider_config in generator_config["providers"].items():
+            default_map = {
+                    "google": GoogleGenAIClient,
+                    "ollama": OllamaClient,
+                }
+            provider_config["model_client"] = default_map[provider_id]
+
+    for key in ["default_provider", "providers"]:
+        if key in generator_config:
+            configs[key] = generator_config[key]
+
+            
 def get_embedder_config() -> Dict[str, Any]:
     """
     Get the current embedder configuration.
@@ -126,4 +199,51 @@ def get_embedder_config() -> Dict[str, Any]:
     """
     return configs.get("embedder", {})
 
+
+
+def get_generator_model_config(provider="google", model=None):
+    """
+    Get configuration for the specified provider and model
+    """
+    provider_config = configs["providers"].get(provider)
+    if not provider_config:
+        raise ValueError(f"Configuration for provider '{provider}' not found")
+
+    model_client = provider_config.get("model_client")
+    if not model_client:
+        raise ValueError(f"Model client not specified for provider '{provider}'")
+
+    # If model not provided, use default model for the provider
+    if not model:
+        model = provider_config.get("default_model")
+        if not model:
+            raise ValueError(f"No default model specified for provider '{provider}'")
+
+    # Get model parameters (if present)
+    model_params = {}
+    if model in provider_config.get("models", {}):
+        model_params = provider_config["models"][model]
+    else:
+        default_model = provider_config.get("default_model")
+        model_params = provider_config["models"][default_model]
+
+    # Prepare base configuration
+    result = {
+        "model_client": model_client,
+    }
+
+    # Provider-specific adjustments
+    if provider == "ollama":
+        # Ollama uses a slightly different parameter structure
+        if "options" in model_params:
+            result["model_kwargs"] = {"model": model, **model_params["options"]}
+        else:
+            result["model_kwargs"] = {"model": model}
+    else:
+        # Standard structure for other providers
+        result["model_kwargs"] = {"model": model, **model_params}
+
+    return result
+
 load_embedder_configs()
+load_generator_config()

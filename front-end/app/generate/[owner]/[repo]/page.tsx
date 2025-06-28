@@ -4,7 +4,7 @@ import type React from "react";
 
 import { useState, useEffect } from "react";
 import { Github, Code, ChevronDown, Download, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +22,10 @@ interface DocumentationItem {
 }
 
 export default function DocsDetails() {
+  const params = useParams();
+  const owner = params.owner as string;
+  const repoName = params.repo as string;
+
   const [docMode, setDocMode] = useState<"high-level" | "low-level">("high-level");
   const [docTypeLoading, setDocTypeLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
@@ -287,7 +291,9 @@ export default function DocsDetails() {
               <div className="container mx-auto">
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col">
-                    <span className="text-base font- text-foreground">{"full_name"}</span>
+                    <span className="text-base font- text-foreground">
+                      {owner}/{repoName}
+                    </span>
                     <div className="text-xs text-muted-foreground">Last generated: 06/06/2004</div>
                   </div>
 
