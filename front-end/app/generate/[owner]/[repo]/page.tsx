@@ -3,7 +3,7 @@
 import type React from "react";
 
 import { useState, useEffect } from "react";
-import { Github, Code, ChevronDown, Download, Loader2 } from "lucide-react";
+import { Code, ChevronDown, Download, Loader2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import {
   DropdownMenu,
@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
+import logo from "@/public/logo.png";
+import Image from "next/image";
 
 interface DocumentationItem {
   title: string;
@@ -280,7 +282,7 @@ export default function DocsDetails() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
                 <div className="cursor-pointer flex items-center gap-3" onClick={goHome}>
-                  <Github className="w-6 h-6 text-blue-600" />
+                  <Image src={logo} alt="AutoDocs Logo" width={32} height={32} className="rounded-full" />
                   <span className="text-lg font-medium">AutoDocs</span>
                 </div>
                 <div className="w-[1px] h-9 bg-slate-400"></div>

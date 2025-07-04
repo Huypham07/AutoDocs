@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Github, Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
+import { Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { TaskBody, TaskResponse } from "@/schemas/task.schema";
+import logo from "@/public/logo.png";
+import Image from "next/image";
 
 export default function AutoDocs() {
   const [repoUrl, setRepoUrl] = useState("https://github.com/Huypham07/AutoDocs");
@@ -126,7 +128,7 @@ export default function AutoDocs() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <Github className="w-8 h-8 text-blue-600" />
+            <Image src={logo} alt="AutoDocs Logo" width={32} height={32} className="rounded-full" />
             <h1 className="text-2xl font-bold">AutoDocs</h1>
           </div>
           <CardTitle>Analyze Git Repository</CardTitle>
@@ -240,10 +242,10 @@ export default function AutoDocs() {
               <p className="text-sm text-blue-800">
                 <strong>How to get an access token:</strong>
               </p>
-              <ul className="text-xs text-blue-700 mt-1 space-y-1">
-                <li>• GitHub: Settings → Developer settings → Personal access tokens</li>
-                <li>• GitLab: User Settings → Access Tokens</li>
-                <li>• Make sure to grant repository read permissions</li>
+              <ul className="text-xs text-blue-700 mt-1 space-y-1 list-disc pl-3">
+                <li>GitHub: Developer settings → Personal access tokens → Tokens</li>
+                <li>GitLab: User Settings → Access Tokens</li>
+                <li>Make sure to grant repository read permissions</li>
               </ul>
             </div>
           )}
