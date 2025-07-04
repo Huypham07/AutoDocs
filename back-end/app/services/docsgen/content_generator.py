@@ -30,7 +30,7 @@ class ContentGenerator:
         
         for page in pages:
             file_paths_str = '\n'.join([f"- [{path}]({path})" for path in page.file_paths])
-            query = f"""You are an expert technical writer and software architect.
+            query = rf"""You are an expert technical writer and software architect.
             Your task is to generate a comprehensive and accurate technical documentation page in Markdown format about a specific feature, system, or module within a given software project.
 
             You will be given:
@@ -160,7 +160,7 @@ class ContentGenerator:
                     logger.error(f"Error in RAG retrieval: {str(e)}")
                     # Continue without RAG if there's an error
                     
-            system_prompt = f"""<role>
+            system_prompt = rf"""<role>
             You are an expert code analyst examining the {self.platform} repository: {self.repo_url} ({self.repo_name}).
             You provide direct, concise, and accurate information about code repositories.
             You NEVER start responses with markdown headers or code fences.
@@ -321,5 +321,3 @@ class ContentGenerator:
                 else:
                     # For other errors, return the error message
                     yield f"\nError: {error_message}"
-
-        logger.info(structure.to_dict())

@@ -72,7 +72,7 @@ class StructureGenerator:
         except Exception as e:
             logger.warning(f"Could not fetch README.md, continuing with empty README: {str(e)}")
         
-        query = f"""Analyze this {self.platform} repository {self.owner}/{self.repo_name} and create a documentation structure for it.
+        query = rf"""Analyze this {self.platform} repository {self.owner}/{self.repo_name} and create a documentation structure for it.
         1. The complete file tree of the project:
         <file_tree>
         {file_tree_data}
@@ -132,7 +132,6 @@ class StructureGenerator:
                         <file_path>[Path to a relevant file]</file_path>
                         <!-- More file paths as needed -->
                     </relevant_files>
-                    <parent_section>section-1</parent_section>
                 </page>
                 <!-- More pages as needed -->
             </pages>
@@ -202,7 +201,7 @@ class StructureGenerator:
                 logger.error(f"Error in RAG retrieval: {str(e)}")
                 # Continue without RAG if there's an error
                 
-        system_prompt = f"""<role>
+        system_prompt = rf"""<role>
         You are an expert code analyst examining the {self.platform} repository: {self.repo_url} ({self.repo_name}).
         You provide direct, concise, and accurate information about code repositories.
         You NEVER start responses with markdown headers or code fences.
