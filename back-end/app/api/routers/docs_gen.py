@@ -31,7 +31,7 @@ async def create_docs(request: TaskRequest):
         transformed_docs = DBPreparation().prepare_db(repo_url=repo_url, access_token=access_token)
         
         try:
-            rag = RAG()
+            rag = RAG(provider="google", model="gemini-2.0-flash")
             rag.prepare_retriever(transformed_docs)
         except Exception as e:
             logger.error(f"Error preparing RAG retriever: {str(e)}")
@@ -57,6 +57,10 @@ async def create_docs(request: TaskRequest):
             content_gen = ContentGenerator(rag=rag, xml_string=xml_match.group(0), repo_url=repo_url, access_token=access_token, owner=owner, repo_name=repo_name)
             async for chunk in content_gen():
                 yield chunk
+                
+            if content_gen.full_structure_response is not None:
+                print("Documentation generation completed successfully.")
+                print("Full structure response:", content_gen.full_structure_response.to_dict())
         return StreamingResponse(generate_full_docs(), media_type="text/event-stream")
     except Exception:
         raise

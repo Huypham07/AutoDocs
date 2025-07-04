@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,9 +21,61 @@ export default function AutoDocs() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
+  const [centerLineIndex, setCenterLineIndex] = useState(1);
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const router = useRouter();
 
+  // HandleScroll events for dynamic text
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const containerCenter = containerRect.top + containerRect.height / 2;
+
+    let closestLineIndex = 1; // middle
+    let minDistance = Infinity;
+
+    lineRefs.current.forEach((lineRef, index) => {
+      if (lineRef) {
+        const lineRect = lineRef.getBoundingClientRect();
+        const lineCenter = lineRect.top + lineRect.height / 2;
+        const distance = Math.abs(lineCenter - containerCenter);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestLineIndex = index;
+        }
+      }
+    });
+
+    setCenterLineIndex(closestLineIndex);
+  };
+
+  // Automatically scroll to the center line when content changes
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [streamingContent]);
+
+  const getTextSizeClass = (index: number, totalLines: number) => {
+    const distance = Math.abs(index - centerLineIndex);
+    if (distance === 0) return "text-sm";
+    return "text-xs";
+  };
+
+  const getOpacityClass = (index: number) => {
+    const distance = Math.abs(index - centerLineIndex);
+    if (distance === 0) return "opacity-100";
+    if (distance === 1) return "opacity-75";
+    return "opacity-50";
+  };
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -203,36 +255,39 @@ export default function AutoDocs() {
           {/* Streaming Response Display */}
           {streamingContent && (
             <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <div className="space-y-1">
-                {(() => {
-                  // Split content into lines and get last 2 lines
-                  const lines = streamingContent.split("\n").filter((line) => line.trim());
-                  const lastTwoLines = lines.slice(-2);
+              <div
+                ref={scrollContainerRef}
+                className="h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200"
+                onScroll={handleScroll}>
+                <div className="space-y-1 py-1">
+                  {(() => {
+                    // Split content into lines and filter out empty lines
+                    const lines = streamingContent.split("\n").filter((line) => line.trim());
 
-                  return lastTwoLines.map((line, index) =>
-                    line.includes("Error:") ? (
+                    return lines.map((line, index) => (
                       <div
-                        key={`${lines.length}-${index}`}
-                        className={`text-sm transition-opacity duration-500 ${
-                          index === lastTwoLines.length - 1
-                            ? "text-red-600 opacity-80 text-sm"
-                            : "text-red-400 opacity-50 text-xs"
-                        }`}>
+                        key={index}
+                        ref={(el) => {
+                          lineRefs.current[index] = el;
+                        }}
+                        className={`
+                          transition-all duration-300 ease-in-out
+                          overflow-x-hidden whitespace-nowrap truncate
+                          ${getTextSizeClass(index, lines.length)}
+                          ${getOpacityClass(index)}
+                          ${
+                            line.includes("Error:")
+                              ? "text-red-600"
+                              : line.includes("Success:") || line.includes("completed")
+                              ? "text-green-600"
+                              : "text-gray-600"
+                          }
+                        `}>
                         {line.trim()}
                       </div>
-                    ) : (
-                      <div
-                        key={`${lines.length}-${index}`}
-                        className={`transition-opacity duration-500 overflow-x-hidden whitespace-nowrap truncate overflow-ellipsis${
-                          index === lastTwoLines.length - 1
-                            ? "text-gray-600 opacity-80 text-sm"
-                            : "text-gray-400 opacity-50 text-xs"
-                        }`}>
-                        {line.trim()}
-                      </div>
-                    )
-                  );
-                })()}
+                    ));
+                  })()}
+                </div>
               </div>
             </div>
           )}

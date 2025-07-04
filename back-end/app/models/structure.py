@@ -10,8 +10,8 @@ class Page:
 
     def to_dict(self):
         return {
-            "id": self.id,
-            "title": self.title,
+            "page_id": self.page_id,
+            "page_title": self.page_title,
             "content": self.content,
             "file_paths": self.file_paths
         }
@@ -26,7 +26,7 @@ class Section:
 
     def to_dict(self):
         return {
-            "title": self.title,
+            "section_title": self.section_title,
             "pages": [page.to_dict() for page in self.pages],
             "subsections": [section.to_dict() for section in self.subsections]
         }

@@ -300,10 +300,11 @@ class StructureGenerator:
                         text = text.replace('<think>', '').replace('</think>', '')
                         yield text
             else:
+                # google gemini model
                 # Generate streaming response
-                response = model.generate_content(prompt, stream=True)
+                response = await model.generate_content_async(prompt, stream=True)
                 # Stream the response
-                for chunk in response:
+                async for chunk in response:
                     if hasattr(chunk, 'text'):
                         yield chunk.text
 
@@ -353,9 +354,9 @@ class StructureGenerator:
                         )
 
                         # Get streaming response using simplified prompt
-                        fallback_response = fallback_model.generate_content(simplified_prompt, stream=True)
+                        fallback_response = await fallback_model.generate_content_async(simplified_prompt, stream=True)
                         # Stream the fallback response
-                        for chunk in fallback_response:
+                        async for chunk in fallback_response:
                             if hasattr(chunk, 'text'):
                                 yield chunk.text
                 except Exception as e2:

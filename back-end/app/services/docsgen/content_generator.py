@@ -21,6 +21,7 @@ class ContentGenerator:
         self.owner = owner
         self.repo_name = repo_name
         self.platform = "github" if is_github_repo(repo_url) else "gitlab"
+        self.full_structure_response = None
         
     async def __call__(self):
         structure = parse_structure_from_xml(self.xml_string)
@@ -247,6 +248,7 @@ class ContentGenerator:
                     }
                 )
                 
+            buffer = []
             try:
                 if provider == "ollama":
                     # Get the response and handle it properly using the previously created api_kwargs
@@ -256,13 +258,15 @@ class ContentGenerator:
                         text = getattr(chunk, 'response', None) or getattr(chunk, 'text', None) or str(chunk)
                         if text and not text.startswith('model=') and not text.startswith('created_at='):
                             text = text.replace('<think>', '').replace('</think>', '')
+                            buffer.append(text)
                             yield text
                 else:
                     # Generate streaming response
-                    response = model.generate_content(prompt, stream=True)
+                    response = await model.generate_content_async(prompt, stream=True)
                     # Stream the response
-                    for chunk in response:
+                    async for chunk in response:
                         if hasattr(chunk, 'text'):
+                            buffer.append(chunk.text)
                             yield chunk.text
 
             except Exception as e_outer:
@@ -297,6 +301,7 @@ class ContentGenerator:
                                 text = getattr(chunk, 'response', None) or getattr(chunk, 'text', None) or str(chunk)
                                 if text and not text.startswith('model=') and not text.startswith('created_at='):
                                     text = text.replace('<think>', '').replace('</think>', '')
+                                    buffer.append(text)
                                     yield text
                         else:
                             # Initialize Google Generative AI model
@@ -310,10 +315,11 @@ class ContentGenerator:
                             )
 
                             # Get streaming response using simplified prompt
-                            fallback_response = fallback_model.generate_content(simplified_prompt, stream=True)
+                            fallback_response = await fallback_model.generate_content_async(simplified_prompt, stream=True)
                             # Stream the fallback response
-                            for chunk in fallback_response:
+                            async for chunk in fallback_response:
                                 if hasattr(chunk, 'text'):
+                                    buffer.append(chunk.text)
                                     yield chunk.text
                     except Exception as e2:
                         logger.error(f"Error in fallback streaming response: {str(e2)}")
@@ -321,3 +327,6 @@ class ContentGenerator:
                 else:
                     # For other errors, return the error message
                     yield f"\nError: {error_message}"
+            
+            page.content = ''.join(buffer)
+        self.full_structure_response = structure

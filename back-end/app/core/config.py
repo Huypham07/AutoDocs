@@ -58,8 +58,16 @@ MAX_EMBEDDING_TOKENS = 8192
 OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
 
 # API Keys
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', None)
 
 # --- end API Keys ---
+
+# Configuration models with API Keys
+import google.generativeai as genai
+if GOOGLE_API_KEY:
+    logger.info("Configuring Google GenAI with API Key")
+    genai.configure(api_key=GOOGLE_API_KEY)
+
 configs = {}
 
 EMBEDDER_CONFIG = {
