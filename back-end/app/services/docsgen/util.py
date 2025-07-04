@@ -30,3 +30,9 @@ def extract_repo_info(repo_url: str) -> dict:
         "owner": owner,
         "repo_name": repo_name
     }
+    
+def is_github_repo(repo_url: str) -> bool:
+    """
+    Checks if the given repository URL is a GitHub repository.
+    """
+    return "github.com" in repo_url

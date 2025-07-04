@@ -3,6 +3,7 @@ from app.core.logging import setup_logging
 from app.core.rag import RAG
 from app.db.repo_db_manager import count_tokens
 from app.core.config import get_generator_model_config
+from app.services.docsgen.util import is_github_repo
 from adalflow import OllamaClient
 import google.generativeai as genai
 from adalflow.core.types import ModelType
@@ -20,15 +21,21 @@ class StructureGenerator:
         self.access_token = access_token
         self.owner = owner
         self.repo_name = repo_name
+        self.platform = "github" if is_github_repo(repo_url) else "gitlab"
         
-    async def generate_structure_stream(self):
+    async def __call__(self):
         file_tree_data = ""
         readme_content = ""
-        
+            
         for branch in ["main", "master"]:
-            api_url = f"https://api.github.com/repos/{self.owner}/{self.repo_name}/git/trees/{branch}?recursive=1"
+            if self.platform == "gitlab":
+                api_url = f"https://gitlab.com/api/v4/projects/{self.owner}%2F{self.repo_name}/repository/tree?ref={branch}&recursive=true"
+            else:
+                api_url = f"https://api.github.com/repos/{self.owner}/{self.repo_name}/git/trees/{branch}?recursive=1"
             headers = {}
-            if self.access_token:
+            if self.access_token and self.platform == "gitlab":
+                headers['Private-Token'] = self.access_token     
+            elif self.access_token and self.platform == "github":
                 headers['Authorization'] = f'token {self.access_token}'
             
             try:
@@ -50,7 +57,11 @@ class StructureGenerator:
             item['path'] for item in tree_data['tree'] if item['type'] == 'blob'
         )
         
-        readme_response = requests.get(f"https://api.github.com/repos/{self.owner}/{self.repo_name}/readme", headers=headers, timeout=10)
+        if self.platform == "gitlab":
+            readme_url = f"https://gitlab.com/api/v4/projects/{self.owner}%2F{self.repo_name}/repository/files/README.md/raw?ref={branch}"
+        else:
+            readme_url = f"https://api.github.com/repos/{self.owner}/{self.repo_name}/readme"
+        readme_response = requests.get(readme_url, headers=headers, timeout=10)
         
         try:
             if readme_response.ok:
@@ -61,90 +72,85 @@ class StructureGenerator:
         except Exception as e:
             logger.warning(f"Could not fetch README.md, continuing with empty README: {str(e)}")
         
-        query = f"""Analyze this GitHub repository {self.owner}/{self.repo_name} and create a documentation structure for it.
-    1. The complete file tree of the project:
-    <file_tree>
-    {file_tree_data}
-    </file_tree>
+        query = f"""Analyze this {self.platform} repository {self.owner}/{self.repo_name} and create a documentation structure for it.
+        1. The complete file tree of the project:
+        <file_tree>
+        {file_tree_data}
+        </file_tree>
 
-    2. The README file of the project:
-    <readme>
-    {readme_content}
-    </readme>
+        2. The README file of the project:
+        <readme>
+        {readme_content}
+        </readme>
 
-    I want to create a English documentation for this repository. Determine the most logical structure for a documentation based on the repository's content.
+        I want to create a English documentation for this repository. Determine the most logical structure for a documentation based on the repository's content.
 
-    When designing the documentation structure, include pages that would benefit from visual diagrams, such as:
-    - Architecture overviews
-    - Data flow descriptions
-    - Component relationships
-    - Process workflows
-    - State machines
-    - Class hierarchies
+        When designing the documentation structure, include pages that would benefit from visual diagrams, such as:
+        - Architecture overviews
+        - Data flow descriptions
+        - Component relationships
+        - Process workflows
+        - State machines
+        - Class hierarchies
 
-    Create a documentation structure with the following main sections:
-    - Overview (general information about the project)
-    - System Architecture (how the system is designed)
-    - Core Features (key functionality)
-    - Data Management/Flow: If applicable, how data is stored, processed, accessed, and managed (e.g., database schema, data pipelines, state management).
-    - Frontend Components (UI elements, if applicable.)
-    - Backend Systems (server-side components)
-    - Model Integration (AI model connections)
-    - Deployment/Infrastructure (how to deploy, what's the infrastructure like)
-    - Extensibility and Customization: If the project architecture supports it, explain how to extend or customize its functionality (e.g., plugins, theming, custom modules, hooks).
+        Create a documentation structure with the following main sections:
+        - Overview (general information about the project)
+        - System Architecture (how the system is designed)
+        - Core Features (key functionality)
+        - Data Management/Flow: If applicable, how data is stored, processed, accessed, and managed (e.g., database schema, data pipelines, state management).
+        - Frontend Components (UI elements, if applicable.)
+        - Backend Systems (server-side components)
+        - Model Integration (AI model connections)
+        - Deployment/Infrastructure (how to deploy, what's the infrastructure like)
+        - Extensibility and Customization: If the project architecture supports it, explain how to extend or customize its functionality (e.g., plugins, theming, custom modules, hooks).
 
-    Each section should contain relevant pages. For example, the "Frontend Components" section might include pages for "Home Page", "Repository Page", "Ask Component", etc.
+        Each section should contain relevant pages. For example, the "Frontend Components" section might include pages for "Home Page", "Repository Page", "Ask Component", etc.
 
-    Return your analysis in the following XML format:
+        Return your analysis in the following XML format:
 
-    <documentation_structure>
-    <title>[Overall title for the documentation]</title>
-    <description>[Brief description of the repository]</description>
-    <sections>
-        <section id="section-1">
-        <title>[Section title]</title>
-        <pages>
-            <page_ref>page-1</page_ref>
-            <page_ref>page-2</page_ref>
-        </pages>
-        <subsections>
-            <section_ref>section-2</section_ref>
-        </subsections>
-        </section>
-        <!-- More sections as needed -->
-    </sections>
-    <pages>
-        <page id="page-1">
-        <title>[Page title]</title>
-        <description>[Brief description of what this page will cover]</description>
-        <importance>high|medium|low</importance>
-        <relevant_files>
-            <file_path>[Path to a relevant file]</file_path>
-            <!-- More file paths as needed -->
-        </relevant_files>
-        <related_pages>
-            <related>page-2</related>
-            <!-- More related page IDs as needed -->
-        </related_pages>
-        <parent_section>section-1</parent_section>
-        </page>
-        <!-- More pages as needed -->
-    </pages>
-    </documentation_structure>
+        <documentation_structure>
+            <title>[Overall title for the documentation]</title>
+            <description>[Brief description of the repository]</description>
+            <sections>
+                <section id="section-1">
+                    <title>[Section title]</title>
+                    <pages>
+                        <page_ref>page-1</page_ref>
+                        <page_ref>page-2</page_ref>
+                    </pages>
+                    <subsections>
+                        <section_ref>section-2</section_ref>
+                    </subsections>
+                </section>
+                <!-- More sections as needed -->
+            </sections>
+            <pages>
+                <page id="page-1">
+                    <title>[Page title]</title>
+                    <description>[Brief description of what this page will cover]</description>
+                    <relevant_files>
+                        <file_path>[Path to a relevant file]</file_path>
+                        <!-- More file paths as needed -->
+                    </relevant_files>
+                    <parent_section>section-1</parent_section>
+                </page>
+                <!-- More pages as needed -->
+            </pages>
+        </documentation_structure>
 
-    IMPORTANT FORMATTING INSTRUCTIONS:
-    - Return ONLY the valid XML structure specified above
-    - DO NOT wrap the XML in markdown code blocks (no \`\`\` or \`\`\`xml)
-    - DO NOT include any explanation text before or after the XML
-    - Ensure the XML is properly formatted and valid
-    - Start directly with <documentation_structure> and end with </documentation_structure>
+        IMPORTANT FORMATTING INSTRUCTIONS:
+        - Return ONLY the valid XML structure specified above
+        - DO NOT wrap the XML in markdown code blocks (no \`\`\` or \`\`\`xml)
+        - DO NOT include any explanation text before or after the XML
+        - Ensure the XML is properly formatted and valid
+        - Start directly with <documentation_structure> and end with </documentation_structure>
 
-    IMPORTANT:
-    1. Create 8-12 pages that would make a comprehensive documentation for this repository
-    2. Each page should focus on a specific aspect of the codebase (e.g., architecture, key features, setup)
-    3. The relevant_files should be actual files from the repository that would be used to generate that page
-    4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters
-    """
+        IMPORTANT:
+        1. Create 8-12 pages that would make a comprehensive documentation for this repository
+        2. Each page should focus on a specific aspect of the codebase (e.g., architecture, key features, setup)
+        3. The relevant_files should be actual files from the repository that would be used to generate that page
+        4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters
+        """
         
         context_text = ""
         retrieved_documents = None
@@ -197,55 +203,48 @@ class StructureGenerator:
                 # Continue without RAG if there's an error
                 
         system_prompt = f"""<role>
-You are an expert code analyst examining the Github repository: {self.repo_url} ({self.repo_name}).
-You provide direct, concise, and accurate information about code repositories.
-You NEVER start responses with markdown headers or code fences.
-IMPORTANT:You MUST respond in English.
-</role>
+        You are an expert code analyst examining the {self.platform} repository: {self.repo_url} ({self.repo_name}).
+        You provide direct, concise, and accurate information about code repositories.
+        You NEVER start responses with markdown headers or code fences.
+        IMPORTANT:You MUST respond in English.
+        </role>
 
-<guidelines>
-- Answer the user's question directly without ANY preamble or filler phrases
-- DO NOT include any rationale, explanation, or extra comments.
-- DO NOT start with preambles like "Okay, here's a breakdown" or "Here's an explanation"
-- DO NOT start with markdown headers like "## Analysis of..." or any file path references
-- DO NOT start with ```markdown code fences
-- DO NOT end your response with ``` closing fences
-- DO NOT start by repeating or acknowledging the question
-- JUST START with the direct answer to the question
+        <guidelines>
+        - Answer the user's question directly without ANY preamble or filler phrases
+        - DO NOT include any rationale, explanation, or extra comments.
+        - DO NOT start with preambles like "Okay, here's a breakdown" or "Here's an explanation"
+        - DO NOT start with markdown headers like "## Analysis of..." or any file path references
+        - DO NOT start with ```markdown code fences
+        - DO NOT end your response with ``` closing fences
+        - DO NOT start by repeating or acknowledging the question
+        - JUST START with the direct answer to the question
 
-<example_of_what_not_to_do>
-```markdown
-## Analysis of `adalflow/adalflow/datasets/gsm8k.py`
+        <example_of_what_not_to_do>
+        ```markdown
+        ## Analysis of `adalflow/adalflow/datasets/gsm8k.py`
 
-This file contains...
-```
-</example_of_what_not_to_do>
+        This file contains...
+        ```
+        </example_of_what_not_to_do>
 
-- Format your response with proper markdown including headings, lists, and code blocks WITHIN your answer
-- For code analysis, organize your response with clear sections
-- Think step by step and structure your answer logically
-- Start with the most relevant information that directly addresses the user's query
-- Be precise and technical when discussing code
-- Your response language should be in the same language as the user's query
-</guidelines>
+        - Format your response with proper markdown including headings, lists, and code blocks WITHIN your answer
+        - For code analysis, organize your response with clear sections
+        - Think step by step and structure your answer logically
+        - Start with the most relevant information that directly addresses the user's query
+        - Be precise and technical when discussing code
+        - Your response language should be in the same language as the user's query
+        </guidelines>
 
-<style>
-- Use concise, direct language
-- Prioritize accuracy over verbosity
-- When showing code, include line numbers and file paths when relevant
-- Use markdown formatting to improve readability
-</style>"""
+        <style>
+        - Use concise, direct language
+        - Prioritize accuracy over verbosity
+        - When showing code, include line numbers and file paths when relevant
+        - Use markdown formatting to improve readability
+        </style>
+        """
 
-        conversation_history = ""
-        for turn_id, turn in self.rag.conversation_history.get_dialog_turns():
-            if not isinstance(turn_id, int) and hasattr(turn, 'user_query') and hasattr(turn, 'assistant_response'):
-                conversation_history += f"<turn>\n<user>{turn.user_query.query_str}</user>\n<assistant>{turn.assistant_response.response_str}</assistant>\n</turn>\n"
-        
         prompt = f"/no_think {system_prompt}\n\n"
-        
-        if conversation_history:
-            prompt += f"<conversation_history>\n{conversation_history}</conversation_history>\n\n"
-            
+                    
         # Only include context if it's not empty
         CONTEXT_START = "<START_OF_CONTEXT>"
         CONTEXT_END = "<END_OF_CONTEXT>"
@@ -320,8 +319,6 @@ This file contains...
                 try:
                     # Create a simplified prompt without context
                     simplified_prompt = f"/no_think {system_prompt}\n\n"
-                    if conversation_history:
-                        simplified_prompt += f"<conversation_history>\n{conversation_history}</conversation_history>\n\n"
 
                     simplified_prompt += "<note>Answering without retrieval augmentation due to input size constraints.</note>\n\n"
                     simplified_prompt += f"<query>\n{query}\n</query>\n\nAssistant: "
