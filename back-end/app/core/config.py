@@ -20,6 +20,11 @@ API_PREFIX = ''
 BACKEND_CORS_ORIGINS = ['*']
 SECURITY_ALGORITHM = 'HS256'
 PORT = int(os.getenv('PORT', 8000))
+
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+DATABASE_NAME = os.getenv("DATABASE_NAME", "docs_generator")
+
+
 NODE_ENV = os.getenv('NODE_ENV', 'development')
 DEFAULT_EXCLUDED_DIRS = [
     "./.venv/", "./venv/", "./env/", "./virtualenv/",

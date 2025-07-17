@@ -6,14 +6,26 @@ from starlette.middleware.cors import CORSMiddleware
 from app.core.config import *
 from app.api.api_router import router
 from app.core.logging import setup_logging
+from app.db.database import connect_to_mongo, close_mongo_connection
+from contextlib import asynccontextmanager
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await connect_to_mongo()
+    yield
+    # Shutdown
+    await close_mongo_connection()
+    
 app = FastAPI(
     title=PROJECT_NAME,
     docs_url="/docs",
     openapi_url=f"{API_PREFIX}/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -52,7 +64,7 @@ async def root():
         "version": "1.0.0",
         "endpoints": endpoints
     }
-
+    
 if __name__ == "__main__":
     logger.info(f"Starting Streaming API on port {PORT}")
 

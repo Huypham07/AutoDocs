@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from app.schemas.task import TaskRequest
@@ -11,6 +12,7 @@ from app.services.docsgen.structure_generator import StructureGenerator
 from app.services.docsgen.content_generator import ContentGenerator
 import asyncio
 import re
+from app.services.docsgen.database_service import DocumentationService
 
 
 setup_logging()
@@ -26,8 +28,10 @@ async def create_docs(request: TaskRequest):
         repo_info = extract_repo_info(str(request.repo_url))
         owner = repo_info.get("owner")
         repo_name = repo_info.get("repo_name")
-        
-        
+        doc_service = DocumentationService()
+        exist_doc = await doc_service.get_documentation_by_repo(owner=owner, repo_name=repo_name)
+        if exist_doc:
+            return "Documentation already exists for this repository."
         transformed_docs = DBPreparation().prepare_db(repo_url=repo_url, access_token=access_token)
         
         try:
@@ -59,8 +63,28 @@ async def create_docs(request: TaskRequest):
                 yield chunk
                 
             if content_gen.full_structure_response is not None:
-                print("Documentation generation completed successfully.")
-                print("Full structure response:", content_gen.full_structure_response.to_dict())
+                try:
+                    saved_id = await doc_service.save_documentation(
+                        title=content_gen.full_structure_response.title,
+                        description=content_gen.full_structure_response.description,
+                        root_sections=content_gen.full_structure_response.root_sections,
+                        repo_url=repo_url,
+                        owner=owner,
+                        repo_name=repo_name,
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc)
+                    )
+                    
+                    if saved_id:
+                        logger.info(f"Documentation saved to MongoDB with ID: {saved_id}")
+                        yield f"\nDocumentation saved successfully! Database ID: {saved_id}"
+                    else:
+                        logger.error("Failed to save documentation to MongoDB")
+                        yield "\nFailed to save documentation to database"
+                        
+                except Exception as e:
+                    logger.error(f"Error saving documentation to MongoDB: {str(e)}")
+                    yield f"\nError saving to database: {str(e)}"
         return StreamingResponse(generate_full_docs(), media_type="text/event-stream")
     except Exception:
         raise

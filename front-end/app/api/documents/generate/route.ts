@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       headers: responseHeaders,
     });
   } catch (error) {
-    console.error("Error in API proxy route (/api/chat/stream):", error);
+    console.error("Error in API proxy route:", error);
     let errorMessage = "Internal Server Error in proxy";
     if (error instanceof Error) {
       errorMessage = error.message;

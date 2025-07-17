@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { TaskBody, TaskResponse } from "@/schemas/task.schema";
+import { TaskBody } from "@/schemas/task.schema";
 import logo from "@/public/logo.png";
 import Image from "next/image";
 
@@ -75,6 +75,22 @@ export default function AutoDocs() {
     return "opacity-50";
   };
 
+  const extractRepoInfo = (url: string) => {
+    const urlPart = url.split("/").filter((part) => part.trim() !== "");
+
+    let owner = "";
+    let repo_name = "";
+    length = urlPart.length;
+    if (length >= 4) {
+      owner = urlPart[length - 2]; // Second last part is the owner
+      repo_name = urlPart[length - 1].replace(/\.git$/, ""); // Remove .git if present
+    } else {
+      owner = urlPart[length - 1].replace(/\.git$/, "");
+      repo_name = owner;
+    }
+    return { owner, repo_name };
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,15 +99,12 @@ export default function AutoDocs() {
     setStreamingContent("");
 
     try {
-      // get base URL from env
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "localhost:8000";
-
       const requestBody: TaskBody = {
         repo_url: repoUrl,
         ...(accessToken && { access_token: accessToken }),
       };
 
-      const response = await fetch(`/api/documents`, {
+      const response = await fetch(`/api/documents/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -148,9 +161,9 @@ export default function AutoDocs() {
         console.error("Error reading stream:", readError);
         throw new Error("Error processing response stream");
       }
-
+      const { owner, repo_name } = extractRepoInfo(repoUrl);
       // Redirect to the documentation page with owner and repo as query parameters
-      // router.push(`/generate/${owner}/${repo_name}`);
+      router.push(`/generate/${owner}/${repo_name}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(errorMessage);

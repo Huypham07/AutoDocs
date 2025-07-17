@@ -1,61 +1,62 @@
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Optional, Any
+from datetime import datetime
+from pydantic import BaseModel, Field
+from bson import ObjectId
+from pydantic.json_schema import JsonSchemaValue
+from pydantic_core import core_schema
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
 
-class Page:
-    def __init__(self, page_title: str, content: str, file_paths: List[str], page_id: str = None):
-        self.page_id = page_id or str(uuid.uuid4())
-        self.page_title = page_title
-        self.content = content
-        self.file_paths = file_paths
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return ObjectId(v)
 
-    def to_dict(self):
-        return {
-            "page_id": self.page_id,
-            "page_title": self.page_title,
-            "content": self.content,
-            "file_paths": self.file_paths
-        }
+    @classmethod
+    def __get_pydantic_core_schema__(cls, _source_type: Any, _handler: GetCoreSchemaHandler) -> core_schema.CoreSchema:
+        return core_schema.no_info_plain_validator_function(cls.validate)
 
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, core_schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        schema = handler(core_schema)
+        schema.update(type="string")
+        return schema
+class Page(BaseModel):
+    page_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    page_title: str
+    content: str
+    file_paths: List[str] = Field(default_factory=list)
 
-class Section:
-    def __init__(self, section_title: str, pages: List[Page], subsections: Optional[List["Section"]] = None, section_id: str = None):
-        self.id = section_id or str(uuid.uuid4())
-        self.section_title = section_title
-        self.pages = pages
-        self.subsections = subsections or []
+class Section(BaseModel):
+    section_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    section_title: str
+    pages: List[Page]
+    subsections: List["Section"] = Field(default_factory=list)
 
-    def to_dict(self):
-        return {
-            "section_title": self.section_title,
-            "pages": [page.to_dict() for page in self.pages],
-            "subsections": [section.to_dict() for section in self.subsections]
-        }
+class Structure(BaseModel):
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    title: str
+    description : str
+    root_sections: List[Section]
+    repo_url: str
+    owner: str
+    repo_name: str
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    status: str = "completed"
 
-
-class Structure:
-    def __init__(self, title: str, description: str, root_sections: List[Section], structure_id: str = None):
-        self.id = structure_id or str(uuid.uuid4())
-        self.title = title
-        self.description = description
-        self.root_sections = root_sections
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "description": self.description,
-            "root_sections": [section.to_dict() for section in self.root_sections]
-        }
-
-    def validate(self):
-        if not self.title or not isinstance(self.title, str):
-            raise ValueError("Title must be a non-empty string")
-        if not isinstance(self.sections, list):
-            raise ValueError("Sections must be a list")
-        # Validate each section recursively
-        for section in self.root_sections:
-            if not isinstance(section, Section):
-                raise ValueError("Invalid section type")
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+        "json_encoders": {ObjectId: str},
+    }
 
         
 def parse_structure_from_xml(xml_string: str) -> Structure:
@@ -135,7 +136,13 @@ def parse_structure_from_xml(xml_string: str) -> Structure:
     return Structure(
         title=title,
         description=description,
-        root_sections=root_sections
+        root_sections=root_sections,
+        repo_url="",  # Placeholder, can be set later
+        owner="",  # Placeholder, can be set later
+        repo_name="",  # Placeholder, can be set later
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        status="completed"  # Default status
     )
     
 def get_pages_from_structure(structure: Structure) -> List[Page]:
