@@ -2,15 +2,17 @@
 
 import type React from "react";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Github, Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
+import { Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { TaskBody, TaskResponse } from "@/schemas/task.schema";
+import { TaskBody } from "@/schemas/task.schema";
+import logo from "@/public/logo.png";
+import Image from "next/image";
 
 export default function AutoDocs() {
   const [repoUrl, setRepoUrl] = useState("https://github.com/Huypham07/AutoDocs");
@@ -19,9 +21,77 @@ export default function AutoDocs() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
+  const [centerLineIndex, setCenterLineIndex] = useState(1);
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const router = useRouter();
 
+  // HandleScroll events for dynamic text
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const containerCenter = containerRect.top + containerRect.height / 2;
+
+    let closestLineIndex = 1; // middle
+    let minDistance = Infinity;
+
+    lineRefs.current.forEach((lineRef, index) => {
+      if (lineRef) {
+        const lineRect = lineRef.getBoundingClientRect();
+        const lineCenter = lineRect.top + lineRect.height / 2;
+        const distance = Math.abs(lineCenter - containerCenter);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestLineIndex = index;
+        }
+      }
+    });
+
+    setCenterLineIndex(closestLineIndex);
+  };
+
+  // Automatically scroll to the center line when content changes
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [streamingContent]);
+
+  const getTextSizeClass = (index: number, totalLines: number) => {
+    const distance = Math.abs(index - centerLineIndex);
+    if (distance === 0) return "text-sm";
+    return "text-xs";
+  };
+
+  const getOpacityClass = (index: number) => {
+    const distance = Math.abs(index - centerLineIndex);
+    if (distance === 0) return "opacity-100";
+    if (distance === 1) return "opacity-75";
+    return "opacity-50";
+  };
+
+  const extractRepoInfo = (url: string) => {
+    const urlPart = url.split("/").filter((part) => part.trim() !== "");
+
+    let owner = "";
+    let repo_name = "";
+    length = urlPart.length;
+    if (length >= 4) {
+      owner = urlPart[length - 2]; // Second last part is the owner
+      repo_name = urlPart[length - 1].replace(/\.git$/, ""); // Remove .git if present
+    } else {
+      owner = urlPart[length - 1].replace(/\.git$/, "");
+      repo_name = owner;
+    }
+    return { owner, repo_name };
+  };
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -29,15 +99,12 @@ export default function AutoDocs() {
     setStreamingContent("");
 
     try {
-      // get base URL from env
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "localhost:8000";
-
       const requestBody: TaskBody = {
         repo_url: repoUrl,
         ...(accessToken && { access_token: accessToken }),
       };
 
-      const response = await fetch(`/api/documents`, {
+      const response = await fetch(`/api/documents/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -94,9 +161,9 @@ export default function AutoDocs() {
         console.error("Error reading stream:", readError);
         throw new Error("Error processing response stream");
       }
-
+      const { owner, repo_name } = extractRepoInfo(repoUrl);
       // Redirect to the documentation page with owner and repo as query parameters
-      // router.push(`/generate/${owner}/${repo_name}`);
+      router.push(`/generate/${owner}/${repo_name}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(errorMessage);
@@ -126,7 +193,7 @@ export default function AutoDocs() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <Github className="w-8 h-8 text-blue-600" />
+            <Image src={logo} alt="AutoDocs Logo" width={32} height={32} className="rounded-full" />
             <h1 className="text-2xl font-bold">AutoDocs</h1>
           </div>
           <CardTitle>Analyze Git Repository</CardTitle>
@@ -201,36 +268,39 @@ export default function AutoDocs() {
           {/* Streaming Response Display */}
           {streamingContent && (
             <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <div className="space-y-1">
-                {(() => {
-                  // Split content into lines and get last 2 lines
-                  const lines = streamingContent.split("\n").filter((line) => line.trim());
-                  const lastTwoLines = lines.slice(-2);
+              <div
+                ref={scrollContainerRef}
+                className="h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200"
+                onScroll={handleScroll}>
+                <div className="space-y-1 py-1">
+                  {(() => {
+                    // Split content into lines and filter out empty lines
+                    const lines = streamingContent.split("\n").filter((line) => line.trim());
 
-                  return lastTwoLines.map((line, index) =>
-                    line.includes("Error:") ? (
+                    return lines.map((line, index) => (
                       <div
-                        key={`${lines.length}-${index}`}
-                        className={`text-sm transition-opacity duration-500 ${
-                          index === lastTwoLines.length - 1
-                            ? "text-red-600 opacity-80 text-sm"
-                            : "text-red-400 opacity-50 text-xs"
-                        }`}>
+                        key={index}
+                        ref={(el) => {
+                          lineRefs.current[index] = el;
+                        }}
+                        className={`
+                          transition-all duration-300 ease-in-out
+                          overflow-x-hidden whitespace-nowrap truncate
+                          ${getTextSizeClass(index, lines.length)}
+                          ${getOpacityClass(index)}
+                          ${
+                            line.includes("Error:")
+                              ? "text-red-600"
+                              : line.includes("Success:") || line.includes("completed")
+                              ? "text-green-600"
+                              : "text-gray-600"
+                          }
+                        `}>
                         {line.trim()}
                       </div>
-                    ) : (
-                      <div
-                        key={`${lines.length}-${index}`}
-                        className={`transition-opacity duration-500 overflow-x-hidden whitespace-nowrap truncate overflow-ellipsis${
-                          index === lastTwoLines.length - 1
-                            ? "text-gray-600 opacity-80 text-sm"
-                            : "text-gray-400 opacity-50 text-xs"
-                        }`}>
-                        {line.trim()}
-                      </div>
-                    )
-                  );
-                })()}
+                    ));
+                  })()}
+                </div>
               </div>
             </div>
           )}
@@ -240,10 +310,10 @@ export default function AutoDocs() {
               <p className="text-sm text-blue-800">
                 <strong>How to get an access token:</strong>
               </p>
-              <ul className="text-xs text-blue-700 mt-1 space-y-1">
-                <li>• GitHub: Settings → Developer settings → Personal access tokens</li>
-                <li>• GitLab: User Settings → Access Tokens</li>
-                <li>• Make sure to grant repository read permissions</li>
+              <ul className="text-xs text-blue-700 mt-1 space-y-1 list-disc pl-3">
+                <li>GitHub: Developer settings → Personal access tokens → Tokens</li>
+                <li>GitLab: User Settings → Access Tokens</li>
+                <li>Make sure to grant repository read permissions</li>
               </ul>
             </div>
           )}
