@@ -22,18 +22,16 @@ Create a `.env` file:
 
 ```
 # Required API Keys
-
+GOOGLE_API_KEY=
 # Server Configuration
-# Optional Fields
-PROJECT_NAME=AutoDocs
-PORT=8000
-NODE_ENV=development
+MONGODB_URL=
+DATABASE_NAME=
 ```
 
 ### Step 3: Start Server
 
 ```bash
-python -m api.main
+python main.py
 ```
 
 ## How It Works
