@@ -76,6 +76,17 @@ class DocumentationRepository:
             logger.error(f'Error getting documentation by ID from MongoDB: {str(e)}')
             return None
 
+    async def get_top_newest_documentations(self, limit: int = 5) -> List[dict]:
+        try:
+            cursor = self.collection.find().sort('created_at', -1).limit(limit)
+            results = await cursor.to_list(length=limit)
+            for result in results:
+                result['_id'] = str(result['_id'])
+            return results
+        except Exception as e:
+            logger.error(f'Error getting top newest documentations: {str(e)}')
+            return []
+
     async def update_documentation(self, structure: Structure) -> bool:
         try:
             from bson import ObjectId

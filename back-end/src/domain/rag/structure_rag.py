@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from dataclasses import field
 from typing import Any
 from typing import Dict
 
 import adalflow as adal
-import google.generativeai as genai
-from adalflow.components.model_client import OllamaClient
-from adalflow.core.types import ModelType
 from domain.preparator.local_db_preparator import count_tokens
 from shared.logging import get_logger
-from shared.settings.advanced_configs import get_generator_model_config
 
 from .base import BaseRAG
 from .base import RAG_TEMPLATE
@@ -20,13 +14,6 @@ logger = get_logger(__name__)
 
 # Maximum token limit for embedding models
 MAX_INPUT_TOKENS = 8192
-
-
-@dataclass
-class StructureRAGAnswer(adal.DataClass):
-    answer: str = field(default='', metadata={'desc': 'Answer to the user query, formatted in markdown for beautiful rendering with react-markdown. DO NOT include ``` triple backticks fences at the beginning or end of your answer.'})
-
-    __output_fields__ = ['answer']
 
 
 class StructureRAG(BaseRAG):
@@ -43,33 +30,35 @@ class StructureRAG(BaseRAG):
         """
         super().__init__(provider=provider, model=model)
 
-        # Set up the output parser
-        data_parser = adal.DataClassParser(data_class=StructureRAGAnswer, return_data_class=True)
-
         # Format instructions to ensure proper output structure
-        format_instructions = data_parser.get_output_format_str() + """
-
+        format_instructions = """
 IMPORTANT FORMATTING RULES:
 1. DO NOT include your thinking or reasoning process in the output
 2. Provide only the final, polished answer
 3. DO NOT include ```markdown fences at the beginning or end of your answer
-4. DO NOT wrap your response in any kind of fences
 5. Start your response directly with the content
 6. The content will already be rendered as markdown
 7. Do not use backslashes before special characters like [ ] { } in your answer
 8. When listing tags or similar items, write them as plain text without escape characters
-9. For pipe characters (|) in text, write them directly without escaping them"""
+9. For pipe characters (|) in text, write them directly without escaping them
+"""
 
         # Set up the main generator
-        self.generator = adal.Generator(
-            template=RAG_TEMPLATE,
-            prompt_kwargs={
-                'output_format_str': format_instructions,
-            },
-            model_client=self.generator_config['model_client'](),
-            model_kwargs=self.generator_config['model_kwargs'],
-            output_processors=data_parser,
-        )
+        if provider == 'openai':
+            self.generator = adal.Generator(
+                template=RAG_TEMPLATE,
+                model_client=self.generator_config['model_client'](),
+                model_kwargs=self.generator_config['model_kwargs'],
+            )
+        else:
+            self.generator = adal.Generator(
+                template=RAG_TEMPLATE,
+                prompt_kwargs={
+                    'output_format_str': format_instructions,
+                },
+                model_client=self.generator_config['model_client'](),
+                model_kwargs=self.generator_config['model_kwargs'],
+            )
 
     def call(self, query: str, structure_kwargs: Dict[str, Any], is_retrieval: bool = True):
         """
@@ -172,10 +161,7 @@ IMPORTANT FORMATTING RULES:
                     'contexts': context,
                     'system_prompt': system_prompt,
                 },
-            )
-            if not isinstance(response, StructureRAGAnswer):
-                logger.error(f'Unexpected response type: {type(response)}')
-                raise ValueError('Error processing query')
+            ).data
 
             return response
 

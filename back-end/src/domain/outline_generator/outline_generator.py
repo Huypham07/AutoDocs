@@ -176,4 +176,4 @@ class OutlineGenerator(BaseOutlineGenerator):
             }, is_retrieval=True,
         )
 
-        return rag_res.answer
+        return rag_res

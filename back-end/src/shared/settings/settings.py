@@ -71,33 +71,6 @@ class Settings(BaseSettings):
                     },
                 },
             },
-            'ollama': {
-                'default_model': 'qwen3:1.7b',
-                'supportsCustomModel': True,
-                'models': {
-                    'qwen3:1.7b': {
-                        'options': {
-                            'temperature': 0.7,
-                            'top_p': 0.8,
-                            'num_ctx': 32000,
-                        },
-                    },
-                    'llama3:8b': {
-                        'options': {
-                            'temperature': 0.7,
-                            'top_p': 0.8,
-                            'num_ctx': 8000,
-                        },
-                    },
-                    'qwen3:8b': {
-                        'options': {
-                            'temperature': 0.7,
-                            'top_p': 0.8,
-                            'num_ctx': 32000,
-                        },
-                    },
-                },
-            },
         },
     }
 

@@ -143,18 +143,31 @@ IMPORTANT FORMATTING RULES:
         generator_config = get_generator_model_config(self.provider, self.model)
 
         # Set up the main generator
-        self.generator = adal.Generator(
-            template=RAG_TEMPLATE,
-            prompt_kwargs={
-                'output_format_str': format_instructions,
-                # 'conversation_history': self.conversation_history,
-                'system_prompt': system_prompt,
-                'contexts': None,
-            },
-            model_client=generator_config['model_client'](),
-            model_kwargs=generator_config['model_kwargs'],
-            output_processors=data_parser,
-        )
+        if provider == 'openai':
+            self.generator = adal.Generator(
+                template=RAG_TEMPLATE,
+                prompt_kwargs={
+                    # 'conversation_history': self.conversation_history,
+                    'system_prompt': system_prompt,
+                    'contexts': None,
+                },
+                model_client=generator_config['model_client'](),
+                model_kwargs=generator_config['model_kwargs'],
+                output_processors=data_parser,
+            )
+        else:
+            self.generator = adal.Generator(
+                template=RAG_TEMPLATE,
+                prompt_kwargs={
+                    'output_format_str': format_instructions,
+                    # 'conversation_history': self.conversation_history,
+                    'system_prompt': system_prompt,
+                    'contexts': None,
+                },
+                model_client=generator_config['model_client'](),
+                model_kwargs=generator_config['model_kwargs'],
+                output_processors=data_parser,
+            )
 
     def _validate_and_filter_embeddings(self, documents: List[Document]) -> List:
         """
