@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "text/event-stream",
       },
       body: JSON.stringify(requestBody),
     });
@@ -30,57 +29,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (!response.body) {
-      return new NextResponse("Stream body from backend is null", { status: 500 });
-    }
-    const stream = new ReadableStream({
-      async start(controller) {
-        const reader = response.body!.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              break;
-            }
-            controller.enqueue(value);
-          }
-        } catch (error) {
-          console.error("Error reading from backend stream in proxy:", error);
-          controller.error(error);
-        } finally {
-          controller.close();
-          reader.releaseLock(); // Important to release the lock on the reader
-        }
-      },
-      cancel(reason) {
-        console.log("Client cancelled stream request:", reason);
-      },
-    });
-
-    // Set up headers for the response to the client
-    const responseHeaders = new Headers();
-    // Copy the Content-Type from the backend response (e.g., 'text/event-stream')
-    const contentType = response.headers.get("Content-Type");
-    if (contentType) {
-      responseHeaders.set("Content-Type", contentType);
-    }
-    // It's good practice for streams not to be cached or transformed by intermediaries.
-    responseHeaders.set("Cache-Control", "no-cache, no-transform");
-
-    return new NextResponse(stream, {
-      status: response.status, // Should be 200 for a successful stream start
-      headers: responseHeaders,
+    return new NextResponse(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
     });
   } catch (error) {
     console.error("Error in API proxy route:", error);
-    let errorMessage = "Internal Server Error in proxy";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    return new NextResponse(JSON.stringify({ error: errorMessage }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

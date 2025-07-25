@@ -23,7 +23,7 @@ export default function DocsDetails() {
   const owner = params.owner as string;
   const repoName = params.repo as string;
 
-  const [docMode, setDocMode] = useState<"high-level" | "low-level">("high-level");
+  const [docMode, setDocMode] = useState<"view" | "ask">("view");
   const [docTypeLoading, setDocTypeLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -53,7 +53,7 @@ export default function DocsDetails() {
 
   // Scroll tracking with Intersection Observer
   useEffect(() => {
-    if (docMode !== "high-level" || allSectionIds.length === 0) return;
+    if (docMode !== "view" || allSectionIds.length === 0) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -103,7 +103,7 @@ export default function DocsDetails() {
     return () => observer.disconnect();
   }, [docMode, allSectionIds]);
 
-  const handleDocModeChange = async (mode: "high-level" | "low-level") => {
+  const handleDocModeChange = async (mode: "view" | "ask") => {
     setDocTypeLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
     setDocMode(mode);
@@ -191,6 +191,7 @@ export default function DocsDetails() {
   const renderContent = () => {
     if (!documentation) return null;
 
+    console.log("Rendering documentation content", documentation);
     const renderSection = (section: Section) => (
       <div key={section.section_id} className="mb-8">
         <h2 className="text-2xl font-bold mb-4">{section.section_title}</h2>
@@ -365,12 +366,12 @@ export default function DocsDetails() {
                           Loading...
                         </>
                       ) : (
-                        <>{docMode === "high-level" ? "High-Level Documentation" : "Low-Level Documentation"}</>
+                        <>{docMode === "view" ? "View Documentation" : "Ask about Documentation"}</>
                       )}
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="high-level">High-Level Documentation</SelectItem>
-                      <SelectItem value="low-level">Low-Level Documentation</SelectItem>
+                      <SelectItem value="view">View Documentation</SelectItem>
+                      <SelectItem value="ask">Ask about Documentation</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -410,7 +411,7 @@ export default function DocsDetails() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Left Pane - Content */}
           <div className="lg:col-span-4">
-            {docMode === "high-level" ? (
+            {docMode === "view" ? (
               renderContent()
             ) : (
               <div className="flex items-center justify-center h-96">
@@ -427,7 +428,7 @@ export default function DocsDetails() {
           <div className="lg:col-span-1">
             <div className="sticky top-[73px] h-fit">
               <div className="space-y-2">
-                {docMode === "high-level" && documentation ? (
+                {docMode === "view" && documentation ? (
                   <>
                     {documentation.root_sections
                       .sort((a, b) => a.section_id.localeCompare(b.section_id))

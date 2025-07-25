@@ -6,7 +6,6 @@ from shared.utils import is_github_repo
 
 from .base import BaseContentGenerator
 from .base import ContentGeneratorInput
-from .base import ContentGeneratorOutput
 
 logger = get_logger(__name__)
 
@@ -19,27 +18,14 @@ class PageContentGenerator(BaseContentGenerator):
         """Prepare the RAG instance for content generation."""
         self.rag = rag
 
-    def generate(self, input_data: ContentGeneratorInput) -> ContentGeneratorOutput:
+    def generate(self, input_data: ContentGeneratorInput) -> str:
         """Generate content for a specific documentation page.
 
         Args:
             input_data (ContentGeneratorInput): The input data for content generation.
 
         Returns:
-            ContentGeneratorOutput: The generated content.
-        """
-        if not self.rag:
-            raise ValueError('RAG instance is not prepared.')
-        return ContentGeneratorOutput(content='This method is not implemented for synchronous generation.')
-
-    async def generate_stream(self, input_data: ContentGeneratorInput):
-        """Generate content for a specific documentation page.
-
-        Args:
-            input_data (ContentGeneratorInput): The input data for content generation.
-
-        Returns:
-            AsyncIterator[str]: An asynchronous iterator over the generated content.
+            str: The generated content.
         """
         if not self.rag:
             raise ValueError('RAG instance is not prepared.')
@@ -49,6 +35,7 @@ class PageContentGenerator(BaseContentGenerator):
         platform = 'github' if is_github_repo(repo_url) else 'gitlab'
 
         file_paths_str = '\n'.join([f'- [{path}]({path})' for path in page.file_paths])
+
         query = rf"""You are an expert technical writer and software architect.
         Your task is to generate a comprehensive and accurate technical documentation page in Markdown format about a specific feature, system, or module within a given software project.
 
@@ -59,6 +46,7 @@ class PageContentGenerator(BaseContentGenerator):
         CRITICAL STARTING INSTRUCTION:
         The very first thing on the page MUST be a \`<details>\` block listing ALL the \`[RELEVANT_SOURCE_FILES]\` you used to generate the content. There MUST be AT LEAST 5 source files listed - if fewer were provided, you MUST find additional related files to include.
         Format it exactly like this:
+
         <details>
         <summary>Relevant source files</summary>
 
@@ -70,7 +58,6 @@ class PageContentGenerator(BaseContentGenerator):
         </details>
 
         Immediately after the \`<details>\` block, the main title of the page should be a H1 Markdown heading: \`# {page.page_title}\`.
-
         Based ONLY on the content of the \`[RELEVANT_SOURCE_FILES]\`:
 
         1.  **Introduction:** Start with a concise introduction (1-2 paragraphs) explaining the purpose, scope, and high-level overview of "{page.page_title}" within the context of the overall project. If relevant, and if information is available in the provided files, link to other potential documentation pages using the format \`[Link Text](#page-anchor-or-id)\`.
@@ -84,8 +71,8 @@ class PageContentGenerator(BaseContentGenerator):
             *   Ensure diagrams are accurate and directly derived from information in the \`[RELEVANT_SOURCE_FILES]\`.
             *   Provide a brief explanation before or after each diagram to give context.
             *   CRITICAL: All diagrams MUST follow strict vertical orientation:
-            - Use "graph TD" (top-down) directive for flow diagrams
-            - NEVER use "graph LR" (left-right)
+            - Use "flowchart TD" (top-down) directive for flow diagrams
+            - NEVER use (left-right)
             - Maximum node width should be 3-4 words
             - For sequence diagrams:
                 - Start with "sequenceDiagram" directive on its own line
@@ -97,6 +84,12 @@ class PageContentGenerator(BaseContentGenerator):
                 - -x for failed messages
                 - Include activation boxes using +/- notation
                 - Add notes for clarification using "Note over" or "Note right of"
+
+            - Before outputting any diagram, mentally check:
+                - Is the syntax valid according to Mermaid specs?
+                - Are all brackets balanced?
+                - Are class names single words (camelCase)?
+                - Are special characters properly escaped?
 
         4.  **Tables:**
             *   Use Markdown tables to summarize information such as:
@@ -126,51 +119,16 @@ class PageContentGenerator(BaseContentGenerator):
         - Generate the content in English
         - Ground every claim in the provided source files.
         - Prioritize accuracy and direct representation of the code's functionality and structure.
+        - All fenced code blocks (e.g., html, mermaid, bash, code, etc.) must be properly closed with a matching triple backtick (), even if the content is short. Partial or unclosed code blocks are strictly not allowed.
         - Structure the document logically for easy understanding by other developers.
         """
 
-        system_prompt = rf"""/no_think
+        rag_res =  self.rag.call(
+            query=query, structure_kwargs={
+                'platform': platform,
+                'repo_url': repo_url,
+                'repo_name': repo_name,
+            }, is_retrieval=True,
+        )
 
-        <role>
-        You are an expert code analyst examining the {platform} repository: {repo_url} ({repo_name}).
-        You provide direct, concise, and accurate information about code repositories.
-        You NEVER start responses with markdown headers or code fences.
-        IMPORTANT:You MUST respond in English.
-        </role>
-
-        <guidelines>
-        - Answer the user's question directly without ANY preamble or filler phrases
-        - DO NOT include any rationale, explanation, or extra comments.
-        - DO NOT start with preambles like "Okay, here's a breakdown" or "Here's an explanation"
-        - DO NOT start with markdown headers like "## Analysis of..." or any file path references
-        - DO NOT start with ```markdown code fences
-        - DO NOT end your response with ``` closing fences
-        - DO NOT start by repeating or acknowledging the question
-        - JUST START with the direct answer to the question
-
-        <example_of_what_not_to_do>
-        ```markdown
-        ## Analysis of `adalflow/adalflow/datasets/gsm8k.py`
-
-        This file contains...
-        ```
-        </example_of_what_not_to_do>
-
-        - Format your response with proper markdown including headings, lists, and code blocks WITHIN your answer
-        - For code analysis, organize your response with clear sections
-        - Think step by step and structure your answer logically
-        - Start with the most relevant information that directly addresses the user's query
-        - Be precise and technical when discussing code
-        - Your response language should be in the same language as the user's query
-        </guidelines>
-
-        <style>
-        - Use concise, direct language
-        - Prioritize accuracy over verbosity
-        - When showing code, include line numbers and file paths when relevant
-        - Use markdown formatting to improve readability
-        </style>
-        """
-
-        async for response in self.rag.acall(query=query, system_prompt=system_prompt):
-            yield response
+        return rag_res.answer

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from typing import Dict
 
+import adalflow as adal
 import google.generativeai as genai
 from adalflow import GoogleGenAIClient
 from adalflow import OllamaClient
@@ -11,6 +12,7 @@ from shared.utils import get_settings
 
 logger = get_logger(__name__)
 settings = get_settings()
+# adal.setup_env()
 
 DEFAULT_EXCLUDED_DIRS = [
     './.venv/', './venv/', './env/', './virtualenv/',

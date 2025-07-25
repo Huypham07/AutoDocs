@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from api.models.docs_gen import DocsGenRequest
+from api.models.docs_gen import DocsGenResponse
 from application.documentation import DocumentationApplication
 from application.documentation import GeneratorInput
-from domain.preparator import PreparatorInput
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Request
-from fastapi.responses import StreamingResponse
+from fastapi.exceptions import HTTPException
 
 router = APIRouter()
 
@@ -24,40 +24,37 @@ def get_documentation_application(request: Request):
     return documentation_application
 
 
-@router.post('/generate/docs')
+@router.post('/generate/docs', response_model=DocsGenResponse)
 async def create_docs(request: DocsGenRequest, application: DocumentationApplication = Depends(get_documentation_application)):
     """Generate documentation for the given repository URL."""
 
     try:
-        exist_doc = await application.get_documentation_by_repo_url(str(request.repo_url))
-
-        if exist_doc:
-            return 'Documentation already exists for this repository.'
-
-        application.prepare(
-            PreparatorInput(
+        response = await application.process(
+            GeneratorInput(
                 repo_url=str(request.repo_url),
                 access_token=request.access_token,
             ),
         )
 
-        # await application.generate(GeneratorInput(
-        #     repo_url=str(request.repo_url),
-        #     access_token=request.access_token,
-        # ))
+        if response is None or response.status != 'success':
+            # raise an error if the response is None or not successful
+            raise HTTPException(status_code=400, detail='Failed to generate documentation')
 
-        # return {
-        #     'message': 'Documentation generation started successfully.',
-        #     'status': 'success',
-        # }
+        # return message for existing documentation
+        if response.is_existing:
+            return DocsGenResponse(
+                status=response.status,
+                message='Documentation already exists for this repository.',
+                is_existing=response.is_existing,
+                processing_time=response.processing_time,
+            )
 
-        return StreamingResponse(
-            application.generate_stream(
-                GeneratorInput(
-                    repo_url=str(request.repo_url),
-                    access_token=request.access_token,
-                ),
-            ), media_type='text/event-stream',
+        return DocsGenResponse(
+            status=response.status,
+            message='Documentation generated successfully.',
+            is_existing=response.is_existing,
+            processing_time=response.processing_time,
         )
+
     except Exception:
         raise

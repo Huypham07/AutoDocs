@@ -10,9 +10,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { TaskBody } from "@/schemas/task.schema";
+import { TaskBody, TaskResponse } from "@/schemas/task.schema";
 import logo from "@/public/logo.png";
 import Image from "next/image";
+import { toast } from "sonner";
 
 export default function AutoDocs() {
   const [repoUrl, setRepoUrl] = useState("https://github.com/Huypham07/AutoDocs");
@@ -20,60 +21,8 @@ export default function AutoDocs() {
   const [showAccessToken, setShowAccessToken] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [streamingContent, setStreamingContent] = useState("");
-  const [centerLineIndex, setCenterLineIndex] = useState(1);
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const router = useRouter();
-
-  // HandleScroll events for dynamic text
-  const handleScroll = () => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const containerRect = container.getBoundingClientRect();
-    const containerCenter = containerRect.top + containerRect.height / 2;
-
-    let closestLineIndex = 1; // middle
-    let minDistance = Infinity;
-
-    lineRefs.current.forEach((lineRef, index) => {
-      if (lineRef) {
-        const lineRect = lineRef.getBoundingClientRect();
-        const lineCenter = lineRect.top + lineRect.height / 2;
-        const distance = Math.abs(lineCenter - containerCenter);
-
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestLineIndex = index;
-        }
-      }
-    });
-
-    setCenterLineIndex(closestLineIndex);
-  };
-
-  // Automatically scroll to the center line when content changes
-  useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-    }
-  }, [streamingContent]);
-
-  const getTextSizeClass = (index: number, totalLines: number) => {
-    const distance = Math.abs(index - centerLineIndex);
-    if (distance === 0) return "text-sm";
-    return "text-xs";
-  };
-
-  const getOpacityClass = (index: number) => {
-    const distance = Math.abs(index - centerLineIndex);
-    if (distance === 0) return "opacity-100";
-    if (distance === 1) return "opacity-75";
-    return "opacity-50";
-  };
 
   const extractRepoInfo = (url: string) => {
     const urlPart = url.split("/").filter((part) => part.trim() !== "");
@@ -96,7 +45,6 @@ export default function AutoDocs() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setStreamingContent("");
 
     try {
       const requestBody: TaskBody = {
@@ -136,34 +84,41 @@ export default function AutoDocs() {
         throw new Error(errorMessage);
       }
 
-      // Process the response
-      let content = "";
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
+      const data: TaskResponse = await response.json();
 
-      if (!reader) {
-        throw new Error("Failed to get response reader");
-      }
+      if (data.status !== "success") {
+        toast(`Failed to fetch documentation: ${data.message}`, {
+          action: {
+            label: "Close",
+            onClick: () => toast.dismiss(),
+          },
+          duration: 3000,
+          className: "text-red-600",
+          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
+          position: "top-center",
+          style: {
+            backgroundColor: "white",
+            outline: "1px solid #ccc",
+          },
+        });
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          content += chunk;
-
-          // Update streaming responses - only keep last 2 lines
-          setStreamingContent((prev) => prev + chunk);
-        }
-        // Ensure final decoding
-        content += decoder.decode();
-      } catch (readError) {
-        console.error("Error reading stream:", readError);
-        throw new Error("Error processing response stream");
+        return;
       }
       const { owner, repo_name } = extractRepoInfo(repoUrl);
-      // Redirect to the documentation page with owner and repo as query parameters
-      router.push(`/generate/${owner}/${repo_name}`);
+      toast(data.message, {
+        duration: 3000,
+        className: "text-green-700",
+        actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
+        position: "top-center",
+        style: {
+          backgroundColor: "white",
+          outline: "1px solid #ccc",
+        },
+      });
+
+      setTimeout(() => {
+        router.push(`/generate/${owner}/${repo_name}`);
+      }, 4000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(errorMessage);
@@ -185,7 +140,6 @@ export default function AutoDocs() {
     setError("");
     setShowAccessToken(false);
     setAccessToken("");
-    setStreamingContent("");
   };
 
   return (
@@ -264,46 +218,6 @@ export default function AutoDocs() {
               )}
             </Button>
           </form>
-
-          {/* Streaming Response Display */}
-          {streamingContent && (
-            <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <div
-                ref={scrollContainerRef}
-                className="h-24 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200"
-                onScroll={handleScroll}>
-                <div className="space-y-1 py-1">
-                  {(() => {
-                    // Split content into lines and filter out empty lines
-                    const lines = streamingContent.split("\n").filter((line) => line.trim());
-
-                    return lines.map((line, index) => (
-                      <div
-                        key={index}
-                        ref={(el) => {
-                          lineRefs.current[index] = el;
-                        }}
-                        className={`
-                          transition-all duration-300 ease-in-out
-                          overflow-x-hidden whitespace-nowrap truncate
-                          ${getTextSizeClass(index, lines.length)}
-                          ${getOpacityClass(index)}
-                          ${
-                            line.includes("Error:")
-                              ? "text-red-600"
-                              : line.includes("Success:") || line.includes("completed")
-                              ? "text-green-600"
-                              : "text-gray-600"
-                          }
-                        `}>
-                        {line.trim()}
-                      </div>
-                    ));
-                  })()}
-                </div>
-              </div>
-            </div>
-          )}
 
           {showAccessToken && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">

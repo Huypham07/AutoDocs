@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any
+from typing import Dict
+
 import adalflow as adal
 import google.generativeai as genai
 from adalflow.components.model_client import OllamaClient
@@ -17,6 +22,13 @@ logger = get_logger(__name__)
 MAX_INPUT_TOKENS = 8192
 
 
+@dataclass
+class StructureRAGAnswer(adal.DataClass):
+    answer: str = field(default='', metadata={'desc': 'Answer to the user query, formatted in markdown for beautiful rendering with react-markdown. DO NOT include ``` triple backticks fences at the beginning or end of your answer.'})
+
+    __output_fields__ = ['answer']
+
+
 class StructureRAG(BaseRAG):
     """RAG with one repo.
     If you want to load a new repos, call prepare_retriever(repo_url_or_path) first."""
@@ -31,17 +43,88 @@ class StructureRAG(BaseRAG):
         """
         super().__init__(provider=provider, model=model)
 
-        self.generator_config = get_generator_model_config(self.provider, self.model)['model_kwargs']
+        # Set up the output parser
+        data_parser = adal.DataClassParser(data_class=StructureRAGAnswer, return_data_class=True)
 
-    async def acall(self, query: str, system_prompt: str):
+        # Format instructions to ensure proper output structure
+        format_instructions = data_parser.get_output_format_str() + """
+
+IMPORTANT FORMATTING RULES:
+1. DO NOT include your thinking or reasoning process in the output
+2. Provide only the final, polished answer
+3. DO NOT include ```markdown fences at the beginning or end of your answer
+4. DO NOT wrap your response in any kind of fences
+5. Start your response directly with the content
+6. The content will already be rendered as markdown
+7. Do not use backslashes before special characters like [ ] { } in your answer
+8. When listing tags or similar items, write them as plain text without escape characters
+9. For pipe characters (|) in text, write them directly without escaping them"""
+
+        # Set up the main generator
+        self.generator = adal.Generator(
+            template=RAG_TEMPLATE,
+            prompt_kwargs={
+                'output_format_str': format_instructions,
+            },
+            model_client=self.generator_config['model_client'](),
+            model_kwargs=self.generator_config['model_kwargs'],
+            output_processors=data_parser,
+        )
+
+    def call(self, query: str, structure_kwargs: Dict[str, Any], is_retrieval: bool = True):
         """
         Process a query using RAG.
 
         Args:
             query: The user's query
         """
+        platform = structure_kwargs.get('platform', 'unknown')
+        repo_url = structure_kwargs.get('repo_url', 'unknown')
+        repo_name = structure_kwargs.get('repo_name', 'unknown')
         try:
-            logger.info(f"debug{self.provider}")
+
+            system_prompt = rf"""
+            <role>
+            You are an expert code analyst examining the {platform} repository: {repo_url} ({repo_name}).
+            You provide direct, concise, and accurate information about code repositories.
+            You NEVER start responses with markdown headers or code fences.
+            IMPORTANT:You MUST respond in English.
+            </role>
+
+            <guidelines>
+            - Answer the user's question directly without ANY preamble or filler phrases
+            - DO NOT include any rationale, explanation, or extra comments.
+            - DO NOT start with preambles like "Okay, here's a breakdown" or "Here's an explanation"
+            - DO NOT start with markdown headers like "## Analysis of..." or any file path references
+            - DO NOT start with ```markdown code fences
+            - DO NOT end your response with ``` closing fences
+            - DO NOT start by repeating or acknowledging the question
+            - JUST START with the direct answer to the question
+
+            <example_of_what_not_to_do>
+            ```markdown
+            ## Analysis of `adalflow/adalflow/datasets/gsm8k.py`
+
+            This file contains...
+            ```
+            </example_of_what_not_to_do>
+
+            - Format your response with proper markdown including headings, lists, and code blocks WITHIN your answer
+            - For code analysis, organize your response with clear sections
+            - Think step by step and structure your answer logically
+            - Start with the most relevant information that directly addresses the user's query
+            - Be precise and technical when discussing code
+            - Your response language should be in the same language as the user's query
+            </guidelines>
+
+            <style>
+            - Use concise, direct language
+            - Prioritize accuracy over verbosity
+            - When showing code, include line numbers and file paths when relevant
+            - Use markdown formatting to improve readability
+            </style>
+            """
+
             input_too_large = False
             tokens = count_tokens(query, self.provider == 'ollama')
             logger.info(f'Request size: {tokens} tokens')
@@ -49,7 +132,8 @@ class StructureRAG(BaseRAG):
                 logger.warning(f'Request exceeds recommended token limit ({tokens} > 7500)')
                 input_too_large = True
 
-            if not input_too_large:
+            context = ''
+            if is_retrieval and not input_too_large:
                 retrieved_documents = self.retriever(query)
 
                 # Fill in the documents
@@ -57,8 +141,6 @@ class StructureRAG(BaseRAG):
                     self.transformed_docs[doc_index]
                     for doc_index in retrieved_documents[0].doc_indices
                 ]
-
-                context = ''
 
                 documents = retrieved_documents[0].documents
                 logger.info(f'Retrieved {len(documents)} documents')
@@ -84,69 +166,18 @@ class StructureRAG(BaseRAG):
                 # Join all parts with clear separation
                 context = '\n\n' + '-' * 10 + '\n\n'.join(context_parts)
 
-            prompt = rf"""
-            <START_OF_SYS_PROMPT>
-            {system_prompt}
-            <END_OF_SYS_PROMPT>
+            response = self.generator.call(
+                prompt_kwargs={
+                    'input_str': query,
+                    'contexts': context,
+                    'system_prompt': system_prompt,
+                },
+            )
+            if not isinstance(response, StructureRAGAnswer):
+                logger.error(f'Unexpected response type: {type(response)}')
+                raise ValueError('Error processing query')
 
-            <START_OF_CONTEXT>
-            {context}
-            <END_OF_CONTEXT>
-
-            <START_OF_USER_PROMPT>
-            {query}
-            <END_OF_USER_PROMPT>
-            """
-            if self.provider == 'ollama':
-                model = OllamaClient()
-                model_kwargs = {
-                    'model': self.generator_config['model'],
-                    'stream': True,
-                    'options': {
-                        'temperature': self.generator_config['temperature'],
-                        'top_p': self.generator_config['top_p'],
-                        'num_ctx': self.generator_config['num_ctx'],
-                    },
-                }
-
-                api_kwargs = model.convert_inputs_to_api_kwargs(
-                    input=prompt,
-                    model_kwargs=model_kwargs,
-                    model_type=ModelType.LLM,
-                )
-            else:
-                # Initialize Google Generative AI model
-                model = genai.GenerativeModel(
-                    model_name=self.generator_config['model'],
-                    generation_config={
-                        'temperature': self.generator_config['temperature'],
-                        'top_p': self.generator_config['top_p'],
-                        'top_k': self.generator_config['top_k'],
-                    },
-                )
-
-            try:
-                if self.provider == 'ollama':
-                    # Get the response and handle it properly using the previously created api_kwargs
-                    response = await model.acall(api_kwargs=api_kwargs, model_type=ModelType.LLM)
-                    # Handle streaming response from Ollama
-                    async for chunk in response:
-                        text = getattr(chunk, 'response', None) or getattr(chunk, 'text', None) or str(chunk)
-                        if text and not text.startswith('model=') and not text.startswith('created_at='):
-                            text = text.replace('<think>', '').replace('</think>', '')
-                            yield text
-                else:
-                    # Generate streaming response
-                    response = await model.generate_content_async(prompt, stream=True)
-                    # Stream the response
-                    async for chunk in response:
-                        if hasattr(chunk, 'text'):
-                            yield chunk.text
-
-            except Exception as e_outer:
-                logger.error(f"Error in streaming response: {str(e_outer)}")
-                error_message = str(e_outer)
-                yield f"\nError: {error_message}"
+            return response
 
         except Exception as e:
             logger.error(f'Error in RAG call: {str(e)}')

@@ -6,6 +6,7 @@ from typing import List
 from typing import Tuple
 
 import adalflow as adal
+from adalflow.components.model_client import GoogleGenAIClient
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 from adalflow.core import Conversation
 from adalflow.core.types import Document
@@ -20,14 +21,15 @@ MAX_INPUT_TOKENS = 8192
 
 
 @dataclass
-class RAGAnswer(adal.DataClass):
+class ChatRAGAnswer(adal.DataClass):
     rationale: str = field(default='', metadata={'desc': 'Chain of thoughts for the answer.'})
     answer: str = field(default='', metadata={'desc': 'Answer to the user query, formatted in markdown for beautiful rendering with react-markdown. DO NOT include ``` triple backticks fences at the beginning or end of your answer.'})
 
     __output_fields__ = ['rationale', 'answer']
 
 
-system_prompt = r"""
+system_prompt = r"""/no_think
+
 You are a code assistant which answers user questions on a Github Repo.
 You will receive user query, relevant context, and past conversation history.
 
@@ -122,7 +124,7 @@ class ChatRAG(adal.Component):
         # self.initialize_db_manager()
 
         # Set up the output parser
-        data_parser = adal.DataClassParser(data_class=RAGAnswer, return_data_class=True)
+        data_parser = adal.DataClassParser(data_class=ChatRAGAnswer, return_data_class=True)
 
         # Format instructions to ensure proper output structure
         format_instructions = data_parser.get_output_format_str() + """
@@ -145,7 +147,7 @@ IMPORTANT FORMATTING RULES:
             template=RAG_TEMPLATE,
             prompt_kwargs={
                 'output_format_str': format_instructions,
-                'conversation_history': self.conversation_history,
+                # 'conversation_history': self.conversation_history,
                 'system_prompt': system_prompt,
                 'contexts': None,
             },
@@ -325,7 +327,7 @@ IMPORTANT FORMATTING RULES:
             logger.error(f'Error in RAG call: {str(e)}')
 
             # Create error response
-            error_response = RAGAnswer(
+            error_response = ChatRAGAnswer(
                 rationale='Error occurred while processing the query.',
                 answer='I apologize, but I encountered an error while processing your question. Please try again or rephrase your question.',
             )

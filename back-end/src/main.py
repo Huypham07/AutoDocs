@@ -29,8 +29,8 @@ async def lifespan(app: FastAPI):
     logger.info('Initializing domain services...')
     await connect_to_mongo()
 
-    app.state.structure_rag = StructureRAG(provider='google', model='gemini-2.0-flash')
-    app.state.chat_rag = ChatRAG(provider='google', model='gemini-2.0-flash')
+    app.state.structure_rag = StructureRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
+    app.state.chat_rag = ChatRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
     app.state.local_db_preparator = LocalDBPreparator()
     app.state.outline_generator = OutlineGenerator()
     app.state.page_content_generator = PageContentGenerator()

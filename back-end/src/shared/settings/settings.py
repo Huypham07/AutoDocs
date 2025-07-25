@@ -59,12 +59,12 @@ class Settings(BaseSettings):
                         'top_p': 0.8,
                         'top_k': 20,
                     },
-                    'gemini-2.5-flash-preview-05-20': {
+                    'gemini-2.5-flash': {
                         'temperature': 0.7,
                         'top_p': 0.8,
                         'top_k': 20,
                     },
-                    'gemini-2.5-pro-preview-03-25': {
+                    'gemini-2.5-flash-lite-preview-06-17': {
                         'temperature': 0.7,
                         'top_p': 0.8,
                         'top_k': 20,

@@ -3,6 +3,13 @@ export interface TaskBody {
   access_token?: string;
 }
 
+export interface TaskResponse {
+  status: string;
+  message: string;
+  is_existing: boolean;
+  processing_time: number;
+}
+
 export interface DocumantationResponse {
   id: string;
   title: string;
