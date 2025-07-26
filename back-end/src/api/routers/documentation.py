@@ -17,6 +17,7 @@ def get_documentation_application(request: Request):
         outline_generator=request.app.state.outline_generator,
         page_content_generator=request.app.state.page_content_generator,
         documentation_repository=request.app.state.documentation_repository,
+        rabbitmq_publisher=request.app.state.rabbitmq_publisher,
     )
     return documentation_application
 

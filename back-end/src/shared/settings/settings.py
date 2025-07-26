@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     NODE_ENV: str = Field(default='development')
     API_PREFIX: str = Field(default='')
     BACKEND_CORS_ORIGINS: list[str] = Field(default=['*'])
+    RABBITMQ_URL: str = Field(default='', description='RabbitMQ connection URL')
 
     EMBEDDER_CONFIG: dict[str, Any] = {
         'embedder': {

@@ -341,34 +341,6 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = "", zoomingEnabled
     typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
   );
 
-  function normalizeMermaidChart(chartStr: string) {
-    // Loại bỏ các ký tự không hợp lệ và chuẩn hóa
-    let normalized = chartStr
-      // Loại bỏ các ký tự điều khiển và ký tự đặc biệt
-      .replace(/[\x00-\x1F\x7F-\x9F]/g, "")
-      // Chuẩn hóa line breaks
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n")
-      // Loại bỏ khoảng trắng thừa ở đầu và cuối mỗi dòng
-      .split("\n")
-      .map((line) => line.trim())
-      .join("\n")
-      // Loại bỏ các dòng trống liên tiếp
-      .replace(/\n\s*\n\s*\n/g, "\n\n")
-      // Chuẩn hóa khoảng trắng trong class definitions
-      .replace(/class\s+(\w+)\s+(\w+)/g, "class $1 $2")
-      // Sửa lỗi diamond syntax - đảm bảo có dấu ? sau diamond
-      .replace(/\{\{([^}]+)\}\}/g, "{$1}") // Fix double braces
-      // Chuẩn hóa arrow syntax
-      .replace(/-->/g, " --> ")
-      .replace(/\s+-->\s+/g, " --> ")
-      // Loại bỏ semicolon thừa
-      .replace(/;\s*;/g, ";")
-      .trim();
-
-    return normalized;
-  }
-
   // Initialize pan-zoom functionality when SVG is rendered
   useEffect(() => {
     if (svg && zoomingEnabled && containerRef.current) {
@@ -419,7 +391,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = "", zoomingEnabled
         setSvg("");
 
         // Render the chart directly without preprocessing
-        const { svg: renderedSvg } = await mermaid.render(idRef.current, normalizeMermaidChart(chart));
+        const { svg: renderedSvg } = await mermaid.render(idRef.current, chart);
 
         if (!isMounted) return;
 
@@ -452,6 +424,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = "", zoomingEnabled
       }
     };
 
+    // console.log("Rendering Mermaid chart:\n", chart);
     renderChart();
 
     return () => {

@@ -30,66 +30,56 @@ class PageContentGenerator(BaseContentGenerator):
         if not self.rag:
             raise ValueError('RAG instance is not prepared.')
         page = input_data.page
-        repo_url = input_data.repo_url
-        repo_name = input_data.repo_name
-        platform = 'github' if is_github_repo(repo_url) else 'gitlab'
 
-        file_paths_str = '\n'.join([f'- [{path}]({path})' for path in page.file_paths])
-
-        query = rf"""You are an expert technical writer and software architect.
-        Your task is to generate a comprehensive and accurate technical documentation page in Markdown format about a specific feature, system, or module within a given software project.
+        query = rf"""Your task is to generate a comprehensive and accurate technical documentation page in Markdown format about a specific feature, system, or module within a given software project.
 
         You will be given:
         1. The "[DOCUMENTATION_PAGE_TOPIC]" for the page you need to create.
         2. A list of "[RELEVANT_SOURCE_FILES]" from the project that you MUST use as the sole basis for the content. You have access to the full content of these files. You MUST use AT LEAST 5 relevant source files for comprehensive coverage - if fewer are provided, search for additional related files in the codebase.
 
         CRITICAL STARTING INSTRUCTION:
-        The very first thing on the page MUST be a \`<details>\` block listing ALL the \`[RELEVANT_SOURCE_FILES]\` you used to generate the content. There MUST be AT LEAST 5 source files listed - if fewer were provided, you MUST find additional related files to include.
-        Format it exactly like this:
 
-        <details>
-        <summary>Relevant source files</summary>
-
-        Remember, do not provide any acknowledgements, disclaimers, apologies, or any other preface before the \`<details>\` block. JUST START with the \`<details>\` block.
-        The following files were used as context for generating this documentation page:
-
-        {file_paths_str}
-        <!-- Add additional relevant files if fewer than 5 were provided -->
-        </details>
-
-        Immediately after the \`<details>\` block, the main title of the page should be a H1 Markdown heading: \`# {page.page_title}\`.
+        The very first thing on the page MUST be the main title of the page should be a H1 Markdown heading: \`# {page.page_title}\`.
         Based ONLY on the content of the \`[RELEVANT_SOURCE_FILES]\`:
 
-        1.  **Introduction:** Start with a concise introduction (1-2 paragraphs) explaining the purpose, scope, and high-level overview of "{page.page_title}" within the context of the overall project. If relevant, and if information is available in the provided files, link to other potential documentation pages using the format \`[Link Text](#page-anchor-or-id)\`.
+        1.  **Introduction:**
+            *   Provide a concise overview (1-2 paragraphs) explaining the purpose, scope, and high-level role of "{page.page_title}" within the overall system.
+            *   Mention any related systems or components if evident in the files. If relevant, link to other documentation pages using `[Text](#anchor)` format.
 
-        2.  **Detailed Sections:** Break down "{page.page_title}" into logical sections using H2 (\`##\`) and H3 (\`###\`) Markdown headings. For each section:
-            *   Explain the architecture, components, data flow, or logic relevant to the section's focus, as evidenced in the source files.
-            *   Identify key functions, classes, data structures, API endpoints, or configuration elements pertinent to that section.
+        2.  **Detailed Sections:**
+            *   Break down the system into its **main components, responsibilities, and interactions**.
+            *   Use H2 (\`##\`) and H3 (\`###\`) headings to organize the structure logically.
+            *   Focus on **architecture**, **data flow**, **responsibility separation**, and **input/output contracts**, as inferred from the codebase.
+            *   Do not focus too much on UI/Frontend components:
+                - Only describe how user interactions are handled if explicitly defined in the source files.
+                - skip every single UI element like card, button, alert, popup, label, etc.
 
-        3.  **Mermaid Diagrams:**
-            *   EXTENSIVELY use Mermaid diagrams (e.g., \`flowchart TD\`, \`sequenceDiagram\`, \`classDiagram\`, \`erDiagram\`, \`graph TD\`) to visually represent architectures, flows, relationships, and schemas found in the source files.
-            *   Ensure diagrams are accurate and directly derived from information in the \`[RELEVANT_SOURCE_FILES]\`.
-            *   Provide a brief explanation before or after each diagram to give context.
-            *   CRITICAL: All diagrams MUST follow strict vertical orientation:
-            - Use "flowchart TD" (top-down) directive for flow diagrams
-            - NEVER use (left-right)
-            - Maximum node width should be 3-4 words
-            - For sequence diagrams:
-                - Start with "sequenceDiagram" directive on its own line
-                - Define ALL participants at the beginning
-                - Use descriptive but concise participant names
-                - Use the correct arrow types:
-                - ->> for request/asynchronous messages
-                - -->> for response messages
-                - -x for failed messages
-                - Include activation boxes using +/- notation
-                - Add notes for clarification using "Note over" or "Note right of"
-
-            - Before outputting any diagram, mentally check:
-                - Is the syntax valid according to Mermaid specs?
-                - Are all brackets balanced?
-                - Are class names single words (camelCase)?
-                - Are special characters properly escaped?
+        3.  **Architecture & Flow Diagrams**
+            *   Use **Mermaid** diagrams extensively to visualize:
+                - Component interactions
+                - Data flow
+                - Sequence of operations
+                - Request-response behavior
+                - Entity-Relationship models
+                - Internal module structure (if applicable)
+            *   Only use **top-down orientation**:
+                - For flow diagrams: \`flowchart TD\`
+                - For sequences:
+                    - \`sequenceDiagram\` (define all participants at the top)
+                    - Start with "sequenceDiagram" directive on its own line
+                    - Define ALL participants at the beginning
+                    - Use descriptive but concise participant names
+                    - Use the correct arrow types:
+                    - ->> for request/asynchronous messages
+                    - -->> for response messages
+                    - -x for failed messages
+                    - Include activation boxes using +/- notation
+                    - Add notes for clarification using "Note over" or "Note right of"
+            *   Strictly avoid:
+                - Left-right orientation (e.g., \`LR\`)
+                - Nested brackets or parentheses in node labels
+                - Long or verbose node names (max 3-4 words)
+            *   Always add a short explanation before or after each diagram for clarity.
 
         4.  **Tables:**
             *   Use Markdown tables to summarize information such as:
@@ -98,14 +88,17 @@ class PageContentGenerator(BaseContentGenerator):
                 *   Configuration options, their types, and default values.
                 *   Data model fields, types, constraints, and descriptions.
 
-        5.  **Code Snippets:**
-            *   Include short, relevant code snippets (e.g., Python, Java, JavaScript, SQL, JSON, YAML) directly from the \`[RELEVANT_SOURCE_FILES]\` to illustrate key implementation details, data structures, or configurations.
-            *   Ensure snippets are well-formatted within Markdown code blocks with appropriate language identifiers.
+        5.  **Input / Output Summary**
+                *   Provide **Markdown tables** summarizing:
+                    - Inputs accepted by the system/module (e.g., API payloads, config values, external triggers)
+                    - Outputs or responses (e.g., returned data, emitted events, side effects)
+                    - Description, format/type, and relevant conditions
+                * Tables should be **concise, complete, and based strictly on the source files.**
 
         6.  **Source Citations (EXTREMELY IMPORTANT):**
-            *   For EVERY piece of significant information, explanation, diagram, table entry, or code snippet, you MUST cite the specific source file(s) and relevant line numbers from which the information was derived.
+            *   For EVERY piece of significant information, explanation, diagram, table entry, or code snippet, you MUST cite the specific source file(s).
             *   Place citations at the end of the paragraph, under the diagram/table, or after the code snippet.
-            *   Use the exact format: \`Sources: [filename.ext:start_line-end_line]()\` for a range, or \`Sources: [filename.ext:line_number]()\` for a single line. Multiple files can be cited: \`Sources: [file1.ext:1-10](), [file2.ext:5](), [dir/file3.ext]()\` (if the whole file is relevant and line numbers are not applicable or too broad).
+            *   Use the exact format: \`Sources: [filename.ext]\`. Multiple files can be cited: \`Sources: [file1.ext], [file2.ext], [dir/file3.ext]\`.
             *   If an entire section is overwhelmingly based on one or two files, you can cite them under the section heading in addition to more specific citations within the section.
             *   IMPORTANT: You MUST cite AT LEAST 5 different source files throughout the documentation page to ensure comprehensive coverage.
 
@@ -124,11 +117,7 @@ class PageContentGenerator(BaseContentGenerator):
         """
 
         rag_res =  self.rag.call(
-            query=query, structure_kwargs={
-                'platform': platform,
-                'repo_url': repo_url,
-                'repo_name': repo_name,
-            }, is_retrieval=True,
+            query=query,
         )
 
         return rag_res

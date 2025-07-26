@@ -29,6 +29,7 @@ class DocumentationRepository:
         repo_name: str,
         created_at: datetime = Field(default_factory=datetime.now),
         updated_at: datetime = Field(default_factory=datetime.now),
+        status: str = 'completed',
     ) -> Optional[str]:
         try:
             doc_data = Structure(
@@ -40,7 +41,7 @@ class DocumentationRepository:
                 repo_name=repo_name,
                 created_at=created_at,
                 updated_at=updated_at,
-                status='completed',  # Default status
+                status=status,
             )
 
             # Convert to dict for MongoDB insertion
@@ -48,7 +49,6 @@ class DocumentationRepository:
 
             result = await self.collection.insert_one(doc_dict)
 
-            logger.info(f'Documentation saved successfully with ID: {result.inserted_id}')
             return str(result.inserted_id)
 
         except Exception as e:

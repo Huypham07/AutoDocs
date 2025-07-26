@@ -60,21 +60,18 @@ IMPORTANT FORMATTING RULES:
                 model_kwargs=self.generator_config['model_kwargs'],
             )
 
-    def call(self, query: str, structure_kwargs: Dict[str, Any], is_retrieval: bool = True):
+    def call(self, query: str):
         """
         Process a query using RAG.
 
         Args:
             query: The user's query
         """
-        platform = structure_kwargs.get('platform', 'unknown')
-        repo_url = structure_kwargs.get('repo_url', 'unknown')
-        repo_name = structure_kwargs.get('repo_name', 'unknown')
         try:
 
-            system_prompt = rf"""
+            system_prompt = r"""
             <role>
-            You are an expert code analyst examining the {platform} repository: {repo_url} ({repo_name}).
+            You are an expert technical writer and software architect.
             You provide direct, concise, and accurate information about code repositories.
             You NEVER start responses with markdown headers or code fences.
             IMPORTANT:You MUST respond in English.
@@ -122,7 +119,7 @@ IMPORTANT FORMATTING RULES:
                 input_too_large = True
 
             context = ''
-            if is_retrieval and not input_too_large:
+            if not input_too_large:
                 retrieved_documents = self.retriever(query)
 
                 # Fill in the documents
@@ -163,6 +160,8 @@ IMPORTANT FORMATTING RULES:
                 },
             ).data
 
+            with open('rag_res.txt', 'a') as f:
+                f.write(response)
             return response
 
         except Exception as e:

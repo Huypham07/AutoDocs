@@ -10,6 +10,12 @@ interface MarkdownProps {
   content: string;
 }
 
+function sanitizeMermaidPlaceholders(mermaidCode: string) {
+  return mermaidCode.replace(/\[[^\]]*\]/g, (label) => {
+    return label.replace(/\{([^{}\s]+)\}/g, (_, key) => `:${key}`);
+  });
+}
+
 const Markdown: React.FC<MarkdownProps> = ({ content }) => {
   // Define markdown components
   const MarkdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
@@ -171,7 +177,7 @@ const Markdown: React.FC<MarkdownProps> = ({ content }) => {
     }) {
       const { inline, className, children, ...otherProps } = props;
       const match = /language-(\w+)/.exec(className || "");
-      const codeContent = children ? String(children).replace(/\n$/, "") : "";
+      const codeContent = sanitizeMermaidPlaceholders(children ? String(children).replace(/\n$/, "") : "");
 
       // Handle Mermaid diagrams
       if (!inline && match && match[1] === "mermaid") {

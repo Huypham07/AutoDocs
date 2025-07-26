@@ -19,6 +19,8 @@ mongodb = MongoDB()
 async def connect_to_mongo():
     """Create database connection"""
     try:
+        if mongodb.client and mongodb.database:
+            return
         mongodb.client = AsyncIOMotorClient(settings.MONGODB_URL)
         mongodb.database = mongodb.client[settings.DATABASE_NAME]
 

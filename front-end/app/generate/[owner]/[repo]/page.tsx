@@ -191,7 +191,6 @@ export default function DocsDetails() {
   const renderContent = () => {
     if (!documentation) return null;
 
-    console.log("Rendering documentation content", documentation);
     const renderSection = (section: Section) => (
       <div key={section.section_id} className="mb-8">
         <h2 className="text-2xl font-bold mb-4">{section.section_title}</h2>

@@ -122,7 +122,7 @@ class OutlineGenerator(BaseOutlineGenerator):
 
         Each section should contain relevant pages. For example, the "Frontend Components" section might include pages for "Home Page", "Repository Page", "Ask Component", etc.
 
-        Return your analysis in the following XML format:
+        Return your analysis in the following strict **XML format**:
 
         <documentation_structure>
             <title>[Overall title for the documentation]</title>
@@ -154,11 +154,14 @@ class OutlineGenerator(BaseOutlineGenerator):
         </documentation_structure>
 
         IMPORTANT FORMATTING INSTRUCTIONS:
+        - Have exactly one <sections> node containing all top-level <section> elements.
+        - Have exactly one <pages> node containing all <page> elements.
+        - All <page_ref> used inside <section> must match one of the defined <page> IDs.
         - Return ONLY the valid XML structure specified above
         - DO NOT wrap the XML in markdown code blocks (no \`\`\` or \`\`\`xml)
         - DO NOT include any explanation text before or after the XML
         - Ensure the XML is properly formatted and valid
-        - REMEMBER the ids of sections and pages like section-1, page-1, etc.
+        - REMEMBER the ids of sections and pages need include an ordinal number (e.g., "section-1", "page-1").
         - Start directly with <documentation_structure> and end with </documentation_structure>
 
         IMPORTANT:
@@ -169,11 +172,7 @@ class OutlineGenerator(BaseOutlineGenerator):
         """
 
         rag_res = self.rag.call(
-            query=query, structure_kwargs={
-                'platform': platform,
-                'repo_url': repo_url,
-                'repo_name': repo_name,
-            }, is_retrieval=True,
+            query=query,
         )
 
         return rag_res

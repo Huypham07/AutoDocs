@@ -1,4 +1,5 @@
 adalflow>=0.1.0
+aio_pika
 asgi_correlation_id==4.2.0
 bert-score
 boto3

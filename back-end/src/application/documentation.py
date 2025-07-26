@@ -6,7 +6,9 @@ from datetime import timezone
 from typing import Optional
 
 from api.models.docs_gen import get_pages_from_structure
+from api.models.docs_gen import Page
 from api.models.docs_gen import parse_structure_from_xml
+from api.models.docs_gen import Structure
 from domain.content_generator import ContentGeneratorInput
 from domain.content_generator import PageContentGenerator
 from domain.outline_generator import OutlineGenerator
@@ -15,24 +17,15 @@ from domain.preparator import LocalDBPreparator
 from domain.preparator import PreparatorInput
 from domain.rag import StructureRAG
 from infra.mongo.documentation_repository import DocumentationRepository
-from pydantic import BaseModel
+from infra.rabbitmq.publisher import RabbitMQPublisher
 from shared.logging import get_logger
 from shared.utils import extract_repo_info
 
+from .schemas import GeneratorInput
+from .schemas import GeneratorOutput
+from .schemas import PageProcessingTask
+
 logger = get_logger(__name__)
-
-
-class GeneratorInput(BaseModel):
-    """Input data for documentation generation."""
-    repo_url: str
-    access_token: Optional[str] = None
-
-
-class GeneratorOutput(BaseModel):
-    """Output data for documentation generation."""
-    status: str = 'pending'
-    is_existing: bool = False
-    processing_time: Optional[float] = None
 
 
 class DocumentationApplication:
@@ -43,12 +36,14 @@ class DocumentationApplication:
         outline_generator: OutlineGenerator,
         page_content_generator: PageContentGenerator,
         documentation_repository: DocumentationRepository,
+        rabbitmq_publisher: RabbitMQPublisher,
     ):
         self.rag = rag
         self.local_db_preparator = local_db_preparator
         self.outline_generator = outline_generator
         self.page_content_generator = page_content_generator
         self.documentation_repository = documentation_repository
+        self.rabbitmq_publisher = rabbitmq_publisher
 
     def prepare(self, preparator_input: PreparatorInput):
         """Prepare the application for documentation generation."""
@@ -73,8 +68,9 @@ class DocumentationApplication:
             if existing_doc:
                 logger.info(f'Documentation already exists for {owner}/{repo_name}.')
                 processing_time = (datetime.now(timezone.utc) - time_start).total_seconds()
+                existing_doc = Structure(**existing_doc)  # Convert to Structure object
                 return GeneratorOutput(
-                    status='success',
+                    status=existing_doc.status,
                     is_existing=True,
                     processing_time=processing_time,
                 )
@@ -108,71 +104,130 @@ class DocumentationApplication:
             pages = get_pages_from_structure(structure)
             logger.info(f'Found {len(pages)} pages in the structure')
 
-            for page in pages:
-                page_content = self.page_content_generator.generate(
-                    ContentGeneratorInput(
-                        repo_url=repo_url,
-                        owner=owner,
-                        repo_name=repo_name,
-                        page=page,
-                    ),
-                )
+            # Save structure to database with status 'processing'
+            saved_id = await self.documentation_repository.save_documentation(
+                title=structure.title,
+                description=structure.description,
+                root_sections=structure.root_sections,
+                repo_url=repo_url,
+                owner=owner,
+                repo_name=repo_name,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+                status='processing',  # Status indicates content is being generated
+            )
 
-                page_content = page_content.strip()
-                # if page_content start with ```markdown\n, ```html, ```text, etc and ends with \n``` remove them
-                if page_content.startswith('```') and page_content.endswith('\n```'):
-                    if page_content.startswith('```markdown\n'):
-                        page_content = page_content[12:-4].strip()
-                    elif page_content.startswith('```html\n'):
-                        page_content = page_content[9:-4].strip()
+            if not saved_id:
+                logger.error('Failed to save documentation structure to MongoDB')
+                raise Exception('Failed to save documentation structure')
 
-                # not good content
-                page.content = page_content
+            logger.info(f'Documentation structure saved with ID: {saved_id}')
 
-            logger.info('Documentation generation complete. Saving to database...')
-            try:
-                saved_id = await self.documentation_repository.save_documentation(
-                    title=structure.title,
-                    description=structure.description,
-                    root_sections=structure.root_sections,
-                    repo_url=repo_url,
-                    owner=owner,
-                    repo_name=repo_name,
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
-                )
+            # Schedule page content generation tasks
+            await self._schedule_page_processing_tasks(
+                document_id=saved_id,
+                pages=pages,
+                repo_url=repo_url,
+                owner=owner,
+                repo_name=repo_name,
+                access_token=access_token,
+            )
 
-                if saved_id:
-                    logger.info(f'Documentation saved to MongoDB with ID: {saved_id}')
-                    processing_time = (datetime.now(timezone.utc) - time_start).total_seconds()
-                    return GeneratorOutput(
-                        status='success',
-                        is_existing=False,
-                        processing_time=processing_time,
-                    )
-                else:
-                    logger.error('Failed to save documentation to MongoDB')
-                    processing_time = (datetime.now(timezone.utc) - time_start).total_seconds()
-                    return GeneratorOutput(
-                        status='not stored',
-                        is_existing=False,
-                        processing_time=processing_time,
-                    )
-
-            except Exception as e:
-                logger.error(f'Error saving documentation to MongoDB: {str(e)}')
-                processing_time = (datetime.now(timezone.utc) - time_start).total_seconds()
-                return GeneratorOutput(
-                    status='not stored',
-                    is_existing=False,
-                    processing_time=processing_time,
-                )
+            processing_time = (datetime.now(timezone.utc) - time_start).total_seconds()
+            return GeneratorOutput(
+                status='processing',  # Status indicates processing is processing
+                is_existing=False,
+                processing_time=processing_time,
+                document_id=saved_id,
+            )
 
         except Exception as e:
             logger.error(f'Error generating documentation: {str(e)}')
             raise
 
+    async def _schedule_page_processing_tasks(
+        self,
+        document_id: str,
+        pages: list[Page],
+        repo_url: str,
+        owner: str,
+        repo_name: str,
+        access_token: Optional[str],
+    ):
+        """Schedule individual page processing tasks to RabbitMQ."""
+        for page in pages:
+            task = PageProcessingTask(
+                document_id=document_id,
+                repo_url=repo_url,
+                owner=owner,
+                repo_name=repo_name,
+                access_token=access_token,
+                page=page,
+            )
+
+            await self.rabbitmq_publisher.publish_page_task(task)
+            logger.info(f'Scheduled page processing task for: {page.page_title}')
+
+    async def process_page_content(self, task: PageProcessingTask):
+        """Process content for a single page (called by message consumer)."""
+        try:
+            logger.info(f'Processing page content for: {task.page.page_title}')
+
+            # Prepare RAG if needed (might need to optimize this)
+            self.prepare(
+                PreparatorInput(
+                    repo_url=task.repo_url,
+                    access_token=task.access_token,
+                ),
+            )
+
+            # Create a page object for content generation
+
+            page = task.page
+
+            # Generate page content
+            page_content = self.page_content_generator.generate(
+                ContentGeneratorInput(
+                    repo_url=task.repo_url,
+                    owner=task.owner,
+                    repo_name=task.repo_name,
+                    page=page,
+                ),
+            )
+
+            # if page_content start with ```markdown\n, ```html, ```text, etc and ends with \n``` remove them
+            if page_content.startswith('```') and page_content.endswith('\n```'):
+                if page_content.startswith('```markdown\n'):
+                    page_content = page_content[12:-4].strip()
+                elif page_content.startswith('```html\n'):
+                    page_content = page_content[9:-4].strip()
+
+            # Update the page in database
+            doc = await self.documentation_repository.get_documentation_by_id(task.document_id)
+            if not doc:
+                logger.error(f'Document not found: {task.document_id}')
+                return
+            doc = Structure(**doc)  # Convert to Structure object
+            pages = get_pages_from_structure(doc)
+
+            # Find the page to update
+            for p in pages:
+                if p.page_id == page.page_id:
+                    p.content = page_content
+                    break
+
+            completed_pages = sum(1 for page in pages if page.content and page.content.strip())
+            total_pages = len(pages)
+            if completed_pages == total_pages:
+                doc.status = 'completed'
+
+            await self.documentation_repository.update_documentation(doc)
+
+        except Exception as e:
+            logger.error(f'Error processing page {task.page.page_title}: {str(e)}')
+
     # existing documentation methods
+
     async def get_documentation_by_repo_url(self, repo_url: str):
         """Get documentation by repository URL."""
         owner, repo_name = extract_repo_info(repo_url)

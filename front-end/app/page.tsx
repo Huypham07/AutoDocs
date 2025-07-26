@@ -85,8 +85,34 @@ export default function AutoDocs() {
       }
 
       const data: TaskResponse = await response.json();
+      const { owner, repo_name } = extractRepoInfo(repoUrl);
+      if (data.status === "completed") {
+        toast(data.message, {
+          duration: 3000,
+          className: "text-green-700",
+          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
+          position: "top-center",
+          style: {
+            backgroundColor: "white",
+            outline: "1px solid #ccc",
+          },
+        });
 
-      if (data.status !== "success") {
+        setTimeout(() => {
+          router.push(`/generate/${owner}/${repo_name}`);
+        }, 4000);
+      } else if (data.status === "processing") {
+        toast(data.message, {
+          duration: 3000,
+          className: "text-green-700",
+          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
+          position: "top-center",
+          style: {
+            backgroundColor: "white",
+            outline: "1px solid #ccc",
+          },
+        });
+      } else {
         toast(`Failed to fetch documentation: ${data.message}`, {
           action: {
             label: "Close",
@@ -101,24 +127,7 @@ export default function AutoDocs() {
             outline: "1px solid #ccc",
           },
         });
-
-        return;
       }
-      const { owner, repo_name } = extractRepoInfo(repoUrl);
-      toast(data.message, {
-        duration: 3000,
-        className: "text-green-700",
-        actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-        position: "top-center",
-        style: {
-          backgroundColor: "white",
-          outline: "1px solid #ccc",
-        },
-      });
-
-      setTimeout(() => {
-        router.push(`/generate/${owner}/${repo_name}`);
-      }, 4000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
       setError(errorMessage);

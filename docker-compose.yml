@@ -49,7 +49,7 @@ services:
       resources:
         limits:
           memory: 4G
-    entrypoint: ["/bin/bash", "-c"]
+    entrypoint: [ "/bin/bash", "-c" ]
     command: |
       "ollama serve &
       sleep 10
@@ -58,6 +58,22 @@ services:
     networks:
       - autodocs-network
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672" # AMQP protocol port (used by Celery or other workers)
+      - "15672:15672" # RabbitMQ Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - autodocs-network
   # autodocs-backend:
   #   build:
   #     context: ./back-end
