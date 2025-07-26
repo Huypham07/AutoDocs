@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     NODE_ENV: str = Field(default='development')
     API_PREFIX: str = Field(default='')
     BACKEND_CORS_ORIGINS: list[str] = Field(default=['*'])
+    RABBITMQ_URL: str = Field(default='', description='RabbitMQ connection URL')
 
     EMBEDDER_CONFIG: dict[str, Any] = {
         'embedder': {
@@ -59,42 +60,15 @@ class Settings(BaseSettings):
                         'top_p': 0.8,
                         'top_k': 20,
                     },
-                    'gemini-2.5-flash-preview-05-20': {
+                    'gemini-2.5-flash': {
                         'temperature': 0.7,
                         'top_p': 0.8,
                         'top_k': 20,
                     },
-                    'gemini-2.5-pro-preview-03-25': {
+                    'gemini-2.5-flash-lite-preview-06-17': {
                         'temperature': 0.7,
                         'top_p': 0.8,
                         'top_k': 20,
-                    },
-                },
-            },
-            'ollama': {
-                'default_model': 'qwen3:1.7b',
-                'supportsCustomModel': True,
-                'models': {
-                    'qwen3:1.7b': {
-                        'options': {
-                            'temperature': 0.7,
-                            'top_p': 0.8,
-                            'num_ctx': 32000,
-                        },
-                    },
-                    'llama3:8b': {
-                        'options': {
-                            'temperature': 0.7,
-                            'top_p': 0.8,
-                            'num_ctx': 8000,
-                        },
-                    },
-                    'qwen3:8b': {
-                        'options': {
-                            'temperature': 0.7,
-                            'top_p': 0.8,
-                            'num_ctx': 32000,
-                        },
                     },
                 },
             },

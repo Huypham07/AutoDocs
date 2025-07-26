@@ -9,7 +9,6 @@ from shared.utils import is_github_repo
 
 from .base import BaseOutlineGenerator
 from .base import OutlineGeneratorInput
-from .base import OutlineGeneratorOutput
 
 logger = get_logger(__name__)
 
@@ -22,27 +21,14 @@ class OutlineGenerator(BaseOutlineGenerator):
         """Prepare the RAG instance for content generation."""
         self.rag = rag
 
-    def generate(self, input_data: OutlineGeneratorInput) -> OutlineGeneratorOutput:
+    def generate(self, input_data: OutlineGeneratorInput) -> str:
         """Generate an outline based on the provided repository URL.
 
         Args:
             input_data (OutlineGeneratorInput): The input data for outline generation.
 
         Returns:
-            OutlineGeneratorOutput: The generated outline.
-        """
-        if not self.rag:
-            raise ValueError('RAG instance is not prepared.')
-        return OutlineGeneratorOutput(outline='This method is not implemented for synchronous generation.')
-
-    async def generate_stream(self, input_data: OutlineGeneratorInput):
-        """Generate an outline based on the provided repository URL.
-
-        Args:
-            input_data (OutlineGeneratorInput): The input data for outline generation.
-
-        Returns:
-            AsyncIterator[str]: An asynchronous iterator over the generated outline.
+            str: The generated outline.
         """
         if not self.rag:
             logger.error('RAG instance is not prepared for streaming generation.')
@@ -51,55 +37,56 @@ class OutlineGenerator(BaseOutlineGenerator):
         owner = input_data.owner
         repo_name = input_data.repo_name
         platform = 'github' if is_github_repo(repo_url) else 'gitlab'
+        access_token = input_data.access_token
 
         file_tree_data = ''
         readme_content = ''
 
-        # for branch in ['main', 'master']:
-        #     if platform == 'gitlab':
-        #         api_url = f'https://gitlab.com/api/v4/projects/{owner}%2F{repo_name}/repository/tree?ref={branch}&recursive=true'
-        #     else:
-        #         api_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1'
-        #     headers = {}
-        #     if access_token and platform == 'gitlab':
-        #         headers['Private-Token'] = access_token
-        #     elif access_token and platform == 'github':
-        #         headers['Authorization'] = f'token {access_token}'
+        for branch in ['main', 'master']:
+            if platform == 'gitlab':
+                api_url = f'https://gitlab.com/api/v4/projects/{owner}%2F{repo_name}/repository/tree?ref={branch}&recursive=true'
+            else:
+                api_url = f'https://api.github.com/repos/{owner}/{repo_name}/git/trees/{branch}?recursive=1'
+            headers = {}
+            if access_token and platform == 'gitlab':
+                headers['Private-Token'] = access_token
+            elif access_token and platform == 'github':
+                headers['Authorization'] = f'token {access_token}'
 
-        #     try:
-        #         response = requests.get(api_url, headers=headers, timeout=10)
-        #         if response.ok:
-        #             tree_data = response.json()
-        #             break
-        #         else:
-        #             error_data = response.text()
-        #             apiErrorDetails = f'Status: {response.status}, Response: {error_data}'
-        #             logger.error(f'Error fetching repository structure: {apiErrorDetails}')
-        #     except Exception as e:
-        #         raise Exception('Error fetching repository structure')
+            try:
+                response = requests.get(api_url, headers=headers, timeout=10)
+                if response.ok:
+                    tree_data = response.json()
+                    break
+                else:
+                    error_data = response.text()
+                    apiErrorDetails = f'Status: {response.status}, Response: {error_data}'
+                    logger.error(f'Error fetching repository structure: {apiErrorDetails}')
+            except Exception:
+                raise Exception('Error fetching repository structure')
 
-        # if 'tree' not in tree_data:
-        #     raise Exception('No tree data found in the repository structure response')
+        if 'tree' not in tree_data:
+            raise Exception('No tree data found in the repository structure response')
 
-        # file_tree_data = '\n'.join(
-        #     item['path'] for item in tree_data['tree'] if item['type'] == 'blob'
-        # )
+        file_tree_data = '\n'.join(
+            item['path'] for item in tree_data['tree'] if item['type'] == 'blob'
+        )
 
-        # if platform == 'gitlab':
-        #     readme_url = f'https://gitlab.com/api/v4/projects/{owner}%2F{repo_name}/repository/files/README.md/raw?ref={branch}'
-        # else:
-        #     readme_url = f'https://api.github.com/repos/{owner}/{repo_name}/readme'
-        # readme_response = requests.get(readme_url, headers=headers, timeout=10)
+        if platform == 'gitlab':
+            readme_url = f'https://gitlab.com/api/v4/projects/{owner}%2F{repo_name}/repository/files/README.md/raw?ref={branch}'
+        else:
+            readme_url = f'https://api.github.com/repos/{owner}/{repo_name}/readme'
+        readme_response = requests.get(readme_url, headers=headers, timeout=10)
 
-        # logger.info(f'Fetching README.md from {readme_url}')
-        # try:
-        #     if readme_response.ok:
-        #         readme_data = readme_response.json()
-        #         readme_content = base64.b64decode(readme_data['content']).decode('utf-8')
-        #     else:
-        #         logger.warning(f'Could not fetch README.md, status: {readme_response.status_code}')
-        # except Exception as e:
-        #     logger.warning(f'Could not fetch README.md, continuing with empty README: {str(e)}')
+        logger.info(f'Fetching README.md from {readme_url}')
+        try:
+            if readme_response.ok:
+                readme_data = readme_response.json()
+                readme_content = base64.b64decode(readme_data['content']).decode('utf-8')
+            else:
+                logger.warning(f'Could not fetch README.md, status: {readme_response.status_code}')
+        except Exception as e:
+            logger.warning(f'Could not fetch README.md, continuing with empty README: {str(e)}')
 
         query = rf"""Analyze this {platform} repository {owner}/{repo_name} and create a documentation structure for it.
         1. The complete file tree of the project:
@@ -135,7 +122,7 @@ class OutlineGenerator(BaseOutlineGenerator):
 
         Each section should contain relevant pages. For example, the "Frontend Components" section might include pages for "Home Page", "Repository Page", "Ask Component", etc.
 
-        Return your analysis in the following XML format:
+        Return your analysis in the following strict **XML format**:
 
         <documentation_structure>
             <title>[Overall title for the documentation]</title>
@@ -167,10 +154,14 @@ class OutlineGenerator(BaseOutlineGenerator):
         </documentation_structure>
 
         IMPORTANT FORMATTING INSTRUCTIONS:
+        - Have exactly one <sections> node containing all top-level <section> elements.
+        - Have exactly one <pages> node containing all <page> elements.
+        - All <page_ref> used inside <section> must match one of the defined <page> IDs.
         - Return ONLY the valid XML structure specified above
         - DO NOT wrap the XML in markdown code blocks (no \`\`\` or \`\`\`xml)
         - DO NOT include any explanation text before or after the XML
         - Ensure the XML is properly formatted and valid
+        - REMEMBER the ids of sections and pages need include an ordinal number (e.g., "section-1", "page-1").
         - Start directly with <documentation_structure> and end with </documentation_structure>
 
         IMPORTANT:
@@ -180,47 +171,8 @@ class OutlineGenerator(BaseOutlineGenerator):
         4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters
         """
 
-        system_prompt = rf"""/no_think
+        rag_res = self.rag.call(
+            query=query,
+        )
 
-        <role>
-        You are an expert code analyst examining the {platform} repository: {repo_url} ({repo_name}).
-        You provide direct, concise, and accurate information about code repositories.
-        You NEVER start responses with markdown headers or code fences.
-        IMPORTANT:You MUST respond in English.
-        </role>
-
-        <guidelines>
-        - Answer the user's question directly without ANY preamble or filler phrases
-        - DO NOT include any rationale, explanation, or extra comments.
-        - DO NOT start with preambles like "Okay, here's a breakdown" or "Here's an explanation"
-        - DO NOT start with markdown headers like "## Analysis of..." or any file path references
-        - DO NOT start with ```markdown code fences
-        - DO NOT end your response with ``` closing fences
-        - DO NOT start by repeating or acknowledging the question
-        - JUST START with the direct answer to the question
-
-        <example_of_what_not_to_do>
-        ```markdown
-        ## Analysis of `adalflow/adalflow/datasets/gsm8k.py`
-
-        This file contains...
-        ```
-        </example_of_what_not_to_do>
-
-        - Format your response with proper markdown including headings, lists, and code blocks WITHIN your answer
-        - For code analysis, organize your response with clear sections
-        - Think step by step and structure your answer logically
-        - Start with the most relevant information that directly addresses the user's query
-        - Be precise and technical when discussing code
-        - Your response language should be in the same language as the user's query
-        </guidelines>
-
-        <style>
-        - Use concise, direct language
-        - Prioritize accuracy over verbosity
-        - When showing code, include line numbers and file paths when relevant
-        - Use markdown formatting to improve readability
-        </style>
-        """
-        async for response in self.rag.acall(query=query, system_prompt=system_prompt):
-            yield response
+        return rag_res

@@ -29,6 +29,7 @@ class DocumentationRepository:
         repo_name: str,
         created_at: datetime = Field(default_factory=datetime.now),
         updated_at: datetime = Field(default_factory=datetime.now),
+        status: str = 'completed',
     ) -> Optional[str]:
         try:
             doc_data = Structure(
@@ -40,7 +41,7 @@ class DocumentationRepository:
                 repo_name=repo_name,
                 created_at=created_at,
                 updated_at=updated_at,
-                status='completed',  # Default status
+                status=status,
             )
 
             # Convert to dict for MongoDB insertion
@@ -48,7 +49,6 @@ class DocumentationRepository:
 
             result = await self.collection.insert_one(doc_dict)
 
-            logger.info(f'Documentation saved successfully with ID: {result.inserted_id}')
             return str(result.inserted_id)
 
         except Exception as e:
@@ -75,6 +75,17 @@ class DocumentationRepository:
         except Exception as e:
             logger.error(f'Error getting documentation by ID from MongoDB: {str(e)}')
             return None
+
+    async def get_top_newest_documentations(self, limit: int = 5) -> List[dict]:
+        try:
+            cursor = self.collection.find().sort('created_at', -1).limit(limit)
+            results = await cursor.to_list(length=limit)
+            for result in results:
+                result['_id'] = str(result['_id'])
+            return results
+        except Exception as e:
+            logger.error(f'Error getting top newest documentations: {str(e)}')
+            return []
 
     async def update_documentation(self, structure: Structure) -> bool:
         try:

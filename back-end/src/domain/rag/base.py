@@ -33,8 +33,7 @@ You: {{dialog_turn.assistant_response.response_str}}
 <START_OF_CONTEXT>
 {% for context in contexts %}
 {{loop.index }}.
-File Path: {{context.meta_data.get('file_path', 'unknown')}}
-Content: {{context.text}}
+Content: {{context}}
 {% endfor %}
 <END_OF_CONTEXT>
 {% endif %}

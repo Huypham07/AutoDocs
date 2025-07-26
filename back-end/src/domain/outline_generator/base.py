@@ -15,20 +15,10 @@ class OutlineGeneratorInput(BaseModel):
     repo_name: str
 
 
-class OutlineGeneratorOutput(BaseModel):
-    """Output data for outline generation."""
-    outline: str
-
-
 class BaseOutlineGenerator(ABC):
     """Base class for outline generators."""
 
     @abstractmethod
-    def generate(self, input_data: OutlineGeneratorInput):
-        """Generate an outline based on the provided repository URL."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    async def generate_stream(self, input_data: OutlineGeneratorInput):
+    def generate(self, input_data: OutlineGeneratorInput) -> str:
         """Generate an outline based on the provided repository URL."""
         raise NotImplementedError()

@@ -1,0 +1,166 @@
+<documentation_structure>
+    <title>AutoDocs Documentation</title>
+    <description>Documentation for the AutoDocs GitHub repository, covering its architecture, features, and usage.</description>
+    <sections>
+        <section id="section-1">
+            <title>Overview</title>
+            <pages>
+                <page_ref>page-1</page_ref>
+                <page_ref>page-2</page_ref>
+            </pages>
+        </section>
+        <section id="section-2">
+            <title>System Architecture</title>
+            <pages>
+                <page_ref>page-3</page_ref>
+                <page_ref>page-4</page_ref>
+            </pages>
+        </section>
+        <section id="section-3">
+            <title>Core Features</title>
+            <pages>
+                <page_ref>page-5</page_ref>
+            </pages>
+        </section>
+        <section id="section-4">
+            <title>Data Management/Flow</title>
+            <pages>
+                <page_ref>page-6</page_ref>
+            </pages>
+        </section>
+        <section id="section-5">
+            <title>Frontend Components</title>
+            <pages>
+                <page_ref>page-7</page_ref>
+            </pages>
+        </section>
+        <section id="section-6">
+            <title>Backend Systems</title>
+            <pages>
+                <page_ref>page-8</page_ref>
+                <page_ref>page-9</page_ref>
+            </pages>
+        </section>
+        <section id="section-7">
+            <title>Model Integration</title>
+            <pages>
+                <page_ref>page-10</page_ref>
+            </pages>
+        </section>
+        <section id="section-8">
+            <title>Deployment/Infrastructure</title>
+            <pages>
+                <page_ref>page-11</page_ref>
+            </pages>
+        </section>
+    </sections>
+    <pages>
+        <page id="page-1">
+            <title>Introduction</title>
+            <description>An introduction to AutoDocs, its purpose, and the problems it solves.</description>
+            <relevant_files>
+                <file_path>README.md</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-2">
+            <title>Getting Started</title>
+            <description>Instructions on how to clone the repository and set up the development environment.</description>
+            <relevant_files>
+                <file_path>README.md</file_path>
+                <file_path>back-end/.env.example</file_path>
+                <file_path>front-end/.env.example</file_path>
+                <file_path>back-end/requirements.txt</file_path>
+                <file_path>front-end/package.json</file_path>
+                <file_path>docker-compose.yml</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-3">
+            <title>System Architecture Overview</title>
+            <description>A high-level overview of the AutoDocs system architecture, including the interaction between frontend, backend, and AI models.</description>
+            <relevant_files>
+                <file_path>back-end/src/main.py</file_path>
+                <file_path>front-end/app/layout.tsx</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-4">
+            <title>Backend Architecture</title>
+            <description>Detailed breakdown of the backend architecture, including its modular structure and key services.</description>
+            <relevant_files>
+                <file_path>back-end/src/__init__.py</file_path>
+                <file_path>back-end/src/api/routers/api_routers.py</file_path>
+                <file_path>back-end/src/application/__init__.py</file_path>
+                <file_path>back-end/src/domain/__init__.py</file_path>
+                <file_path>back-end/src/infra/__init__.py</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-5">
+            <title>Key Functionality</title>
+            <description>Explanation of the core features of AutoDocs, such as repository analysis, documentation generation, and AI-powered insights.</description>
+            <relevant_files>
+                <file_path>README.md</file_path>
+                <file_path>front-end/app/generate/[owner]/[repo]/page.tsx</file_path>
+                <file_path>back-end/src/api/routers/docs_gen.py</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-6">
+            <title>Data Flow and Storage</title>
+            <description>Description of how data is processed, stored, and managed within the AutoDocs system, including database interactions.</description>
+            <relevant_files>
+                <file_path>back-end/src/infra/mongo/core.py</file_path>
+                <file_path>back-end/src/infra/mongo/documentation_repository.py</file_path>
+                <file_path>back-end/src/domain/preparator/local_db_preparator.py</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-7">
+            <title>Frontend Components</title>
+            <description>Details on the frontend components, including UI elements, state management, and user interaction flows.</description>
+            <relevant_files>
+                <file_path>front-end/app/page.tsx</file_path>
+                <file_path>front-end/app/generate/[owner]/[repo]/page.tsx</file_path>
+                <file_path>front-end/components/Markdown.tsx</file_path>
+                <file_path>front-end/components/ui/button.tsx</file_path>
+                <file_path>front-end/components/ui/input.tsx</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-8">
+            <title>Backend API Endpoints</title>
+            <description>Documentation for the backend API endpoints, detailing their purpose, request/response formats, and usage.</description>
+            <relevant_files>
+                <file_path>back-end/src/api/routers/api_routers.py</file_path>
+                <file_path>back-end/src/api/routers/chat.py</file_path>
+                <file_path>back-end/src/api/routers/docs_gen.py</file_path>
+                <file_path>back-end/src/api/routers/documentation.py</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-9">
+            <title>Backend Services and Logic</title>
+            <description>Explanation of the core backend services and their logic, including content generation, outline generation, and RAG implementations.</description>
+            <relevant_files>
+                <file_path>back-end/src/application/documentation.py</file_path>
+                <file_path>back-end/src/domain/content_generator/page_content_generator.py</file_path>
+                <file_path>back-end/src/domain/outline_generator/outline_generator.py</file_path>
+                <file_path>back-end/src/domain/rag/chat_rag.py</file_path>
+                <file_path>back-end/src/evaluator/evaluate.py</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-10">
+            <title>AI Model Integration</title>
+            <description>Details on how AutoDocs integrates with various AI models for embedding, language generation, and other AI-driven tasks.</description>
+            <relevant_files>
+                <file_path>back-end/src/infra/embedder/ollama.py</file_path>
+                <file_path>back-end/src/infra/embedder/openai.py</file_path>
+                <file_path>back-end/src/infra/llm/openai.py</file_path>
+                <file_path>back-end/src/infra/llm/bedrock.py</file_path>
+            </relevant_files>
+        </page>
+        <page id="page-11">
+            <title>Deployment and Infrastructure</title>
+            <description>Information on deploying AutoDocs, including Docker configurations and server setup.</description>
+            <relevant_files>
+                <file_path>back-end/Dockerfile</file_path>
+                <file_path>docker-compose.yml</file_path>
+                <file_path>front-end/next.config.mjs</file_path>
+            </relevant_files>
+        </page>
+    </pages>
+</documentation_structure>

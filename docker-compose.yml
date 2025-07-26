@@ -49,7 +49,7 @@ services:
       resources:
         limits:
           memory: 4G
-    entrypoint: ["/bin/bash", "-c"]
+    entrypoint: [ "/bin/bash", "-c" ]
     command: |
       "ollama serve &
       sleep 10
@@ -58,24 +58,40 @@ services:
     networks:
       - autodocs-network
 
-  autodocs-backend:
-    build:
-      context: ./back-end
-      dockerfile: Dockerfile
-    container_name: autodocs-backend
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    restart: unless-stopped
     ports:
-      - "8000:8000"
-    volumes:
-      - ./back-end/src:/app
+      - "5672:5672" # AMQP protocol port (used by Celery or other workers)
+      - "15672:15672" # RabbitMQ Management UI
     environment:
-      - PYTHONPATH=/app
-      - PYTHONUNBUFFERED=1
-    env_file:
-      - ./back-end/.env
-    working_dir: /app
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     networks:
       - autodocs-network
+  # autodocs-backend:
+  #   build:
+  #     context: ./back-end
+  #     dockerfile: Dockerfile
+  #   container_name: autodocs-backend
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - ./back-end/src:/app
+  #   environment:
+  #     - PYTHONPATH=/app
+  #     - PYTHONUNBUFFERED=1
+  #   env_file:
+  #     - ./back-end/.env
+  #   working_dir: /app
+  #   command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+  #   networks:
+  #     - autodocs-network
 
 networks:
   autodocs-network:

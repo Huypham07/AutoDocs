@@ -424,6 +424,7 @@ const Mermaid: React.FC<MermaidProps> = ({ chart, className = "", zoomingEnabled
       }
     };
 
+    // console.log("Rendering Mermaid chart:\n", chart);
     renderChart();
 
     return () => {

@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from infra.mongo.core import close_mongo_connection
 from infra.mongo.core import connect_to_mongo
 from infra.mongo.documentation_repository import DocumentationRepository
+from infra.rabbitmq.publisher import RabbitMQPublisher
 from shared.logging import get_logger
 from shared.logging import setup_logging
 from shared.utils import get_settings
@@ -29,17 +30,21 @@ async def lifespan(app: FastAPI):
     logger.info('Initializing domain services...')
     await connect_to_mongo()
 
-    app.state.structure_rag = StructureRAG(provider='google', model='gemini-2.0-flash')
-    app.state.chat_rag = ChatRAG(provider='google', model='gemini-2.0-flash')
+    app.state.structure_rag = StructureRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
+    app.state.chat_rag = ChatRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
     app.state.local_db_preparator = LocalDBPreparator()
     app.state.outline_generator = OutlineGenerator()
     app.state.page_content_generator = PageContentGenerator()
     app.state.documentation_repository = DocumentationRepository()
+    app.state.rabbitmq_publisher = RabbitMQPublisher()
+    await app.state.rabbitmq_publisher.connect()
 
     logger.info('Domain services initialized successfully')
     yield
     # Shutdown
     await close_mongo_connection()
+    if hasattr(app.state, 'rabbitmq_publisher'):
+        await app.state.rabbitmq_publisher.close()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

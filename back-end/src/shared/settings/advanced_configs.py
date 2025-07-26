@@ -6,6 +6,8 @@ from typing import Dict
 import google.generativeai as genai
 from adalflow import GoogleGenAIClient
 from adalflow import OllamaClient
+from adalflow.components.model_client import BedrockAPIClient
+from adalflow.components.model_client import OpenAIClient
 from shared.logging import get_logger
 from shared.utils import get_settings
 
@@ -70,7 +72,8 @@ def load_generator_config():
         for provider_id, provider_config in generator_config['providers'].items():
             default_map = {
                 'google': GoogleGenAIClient,
-                'ollama': OllamaClient,
+                'openai': OpenAIClient,
+                'bedrock': BedrockAPIClient,
             }
             provider_config['model_client'] = default_map[provider_id]
 
@@ -120,21 +123,11 @@ def get_generator_model_config(provider='google', model=None):
         'model_client': model_client,
     }
 
-    # Provider-specific adjustments
-    if provider == 'ollama':
-        # Ollama uses a slightly different parameter structure
-        if 'options' in model_params:
-            result['model_kwargs'] = {'model': model, **model_params['options']}
-        else:
-            result['model_kwargs'] = {'model': model}
-    else:
-        # Standard structure for other providers
-        result['model_kwargs'] = {'model': model, **model_params}
+    # Standard structure for other providers
+    result['model_kwargs'] = {'model': model, **model_params}
 
     return result
 
 
 load_embedder_configs()
 load_generator_config()
-
-logger.info(f"settings: {settings}")

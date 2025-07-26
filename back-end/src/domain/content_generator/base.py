@@ -15,20 +15,10 @@ class ContentGeneratorInput(BaseModel):
     page: Page
 
 
-class ContentGeneratorOutput(BaseModel):
-    """Output data for content generation."""
-    content: str
-
-
 class BaseContentGenerator(ABC):
     """Base class for content generators."""
 
     @abstractmethod
-    def generate(self, input_data: ContentGeneratorInput) -> ContentGeneratorOutput:
-        """Generate content based on the provided repository URL or file."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    async def generate_stream(self, input_data: ContentGeneratorInput):
+    def generate(self, input_data: ContentGeneratorInput) -> str:
         """Generate content based on the provided repository URL or file."""
         raise NotImplementedError()

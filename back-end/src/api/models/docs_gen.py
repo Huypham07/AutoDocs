@@ -31,6 +31,16 @@ class DocsGenRequest(BaseModel):
     access_token: Optional[str] = Field(None, description='Access token for private repository')
 
 
+class DocsGenResponse(BaseModel):
+    """
+    Response schema for documentation generation
+    """
+    status: str = Field(..., description='Status of the documentation generation')
+    message: str = Field(..., description='Message providing additional information')
+    is_existing: bool = Field(..., description='Indicates if the documentation already exists')
+    processing_time: Optional[float] = Field(None, description='Time taken to process the request (Count in seconds)')
+
+
 class PyObjectId(ObjectId):
     @classmethod
     def __get_validators__(cls):
