@@ -15,15 +15,18 @@ import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import logo from "@/public/logo.png";
 import Image from "next/image";
-import { DocumantationResponse, Section, Page } from "@/schemas/task.schema";
+import { DocumantationResponse, Section, Page } from "@/types/task";
 import Markdown from "@/components/Markdown";
+import { ChatInterface } from "@/components/chat-interface";
 
 export default function DocsDetails() {
   const params = useParams();
   const owner = params.owner as string;
   const repoName = params.repo as string;
 
-  const [docMode, setDocMode] = useState<"view" | "ask">("view");
+  const [repoUrl, setRepoUrl] = useState<string>("");
+  const [accessToken, setAccessToken] = useState<string>("");
+  const [docMode, setDocMode] = useState<"view" | "ask">("ask");
   const [docTypeLoading, setDocTypeLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -31,6 +34,12 @@ export default function DocsDetails() {
   const [allSectionIds, setAllSectionIds] = useState<string[]>([]);
 
   const router = useRouter();
+
+  // Initialize localStorage values on client side
+  useEffect(() => {
+    setRepoUrl(localStorage.getItem("repo_url") || "");
+    setAccessToken(localStorage.getItem("access_token") || "");
+  }, []);
 
   const goHome = () => {
     router.push("/");
@@ -270,6 +279,7 @@ export default function DocsDetails() {
         if (response.ok) {
           const data: DocumantationResponse = await response.json();
           setDocumentation(data);
+          setRepoUrl(data.repo_url);
           const pageIds = collectPageIds(data.root_sections);
           setAllSectionIds(pageIds);
         }
@@ -406,44 +416,31 @@ export default function DocsDetails() {
       </header>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Left Pane - Content */}
-          <div className="lg:col-span-4">
-            {docMode === "view" ? (
-              renderContent()
-            ) : (
-              <div className="flex items-center justify-center h-96">
-                <div className="text-center">
-                  <div className="text-6xl mb-4">🚧</div>
-                  <h3 className="text-xl font-semibold mb-2">This section is under development</h3>
-                  <p className="text-muted-foreground">Low-level code documentation will be available soon.</p>
-                </div>
-              </div>
-            )}
-          </div>
+      {docMode === "view" ? (
+        <div className="container mx-auto px-4 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            {/* Left Pane - Content */}
+            <div className="lg:col-span-4">{renderContent()}</div>
 
-          {/* Right Pane - TOC */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-[73px] h-fit">
-              <div className="space-y-2">
-                {docMode === "view" && documentation ? (
+            {/* Right Pane - TOC */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-[73px] h-fit">
+                <div className="space-y-2">
                   <>
                     {documentation.root_sections
                       .sort((a, b) => a.section_id.localeCompare(b.section_id))
                       .map((section) => renderDocumentationItem(section))}
                   </>
-                ) : (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Code className="w-8 h-8 mx-auto mb-2" />
-                    <p className="text-sm">Code documentation coming soon</p>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="container mx-auto px-4 py-6 h-full">
+          <ChatInterface repoUrl={repoUrl} accessToken={accessToken} />
+        </div>
+      )}
     </div>
   );
 }

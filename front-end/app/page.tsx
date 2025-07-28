@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { TaskBody, TaskResponse } from "@/schemas/task.schema";
+import { TaskBody, TaskResponse } from "@/types/task";
 import logo from "@/public/logo.png";
 import Image from "next/image";
 import { toast } from "sonner";
@@ -98,6 +98,8 @@ export default function AutoDocs() {
           },
         });
 
+        localStorage.setItem("repo_url", repoUrl);
+        localStorage.setItem("access_token", accessToken);
         setTimeout(() => {
           router.push(`/generate/${owner}/${repo_name}`);
         }, 4000);

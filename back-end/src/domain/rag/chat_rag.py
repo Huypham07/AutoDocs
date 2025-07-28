@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field
+from typing import Any
 from typing import List
-from typing import Tuple
+from typing import Optional
 
 import adalflow as adal
-from adalflow.components.model_client import GoogleGenAIClient
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
-from adalflow.core import Conversation
 from adalflow.core.types import Document
+from domain.preparator.local_db_preparator import count_tokens
 from shared.logging import get_logger
 from shared.settings.advanced_configs import configs
 from shared.settings.advanced_configs import get_generator_model_config
@@ -28,10 +28,12 @@ class ChatRAGAnswer(adal.DataClass):
     __output_fields__ = ['rationale', 'answer']
 
 
-system_prompt = r"""/no_think
-
-You are a code assistant which answers user questions on a Github Repo.
+system_prompt = r"""You are a code assistant which answers user questions on a Github Repo.
 You will receive user query, relevant context, and past conversation history.
+
+IF THE CONTEXT IS IRRELEVANT OR INSUFFICIENT:
+- If the context retrieved from the repo is irrelevant or insufficient to confidently answer the user query, reply briefly that you cannot answer due to lack of relevant information in the repo.
+- Do not try to guess or hallucinate answers without clear support from the repo context.
 
 LANGUAGE DETECTION AND RESPONSE:
 - Detect the language of the user's query
@@ -63,19 +65,14 @@ RAG_TEMPLATE = r"""<START_OF_SYS_PROMPT>
 {# OrderedDict of DialogTurn #}
 {% if conversation_history %}
 <START_OF_CONVERSATION_HISTORY>
-{% for key, dialog_turn in conversation_history.items() %}
-{{key}}.
-User: {{dialog_turn.user_query.query_str}}
-You: {{dialog_turn.assistant_response.response_str}}
-{% endfor %}
+{{conversation_history}}
 <END_OF_CONVERSATION_HISTORY>
 {% endif %}
 {% if contexts %}
 <START_OF_CONTEXT>
 {% for context in contexts %}
 {{loop.index }}.
-File Path: {{context.meta_data.get('file_path', 'unknown')}}
-Content: {{context.text}}
+Content: {{context}}
 {% endfor %}
 <END_OF_CONTEXT>
 {% endif %}
@@ -103,7 +100,6 @@ class ChatRAG(adal.Component):
         self.model = model
 
         # Initialize components
-        self.conversation_history = Conversation()
         self.embedder = adal.Embedder(
             model_client=configs['embedder']['model_client'](),
             model_kwargs=configs['embedder']['model_kwargs'],
@@ -149,7 +145,6 @@ IMPORTANT FORMATTING RULES:
                 prompt_kwargs={
                     # 'conversation_history': self.conversation_history,
                     'system_prompt': system_prompt,
-                    'contexts': None,
                 },
                 model_client=generator_config['model_client'](),
                 model_kwargs=generator_config['model_kwargs'],
@@ -162,7 +157,6 @@ IMPORTANT FORMATTING RULES:
                     'output_format_str': format_instructions,
                     # 'conversation_history': self.conversation_history,
                     'system_prompt': system_prompt,
-                    'contexts': None,
                 },
                 model_client=generator_config['model_client'](),
                 model_kwargs=generator_config['model_kwargs'],
@@ -312,36 +306,80 @@ IMPORTANT FORMATTING RULES:
                 logger.error(f"Sample embedding sizes: {', '.join(sizes)}")
             raise
 
-    def __call__(self, query: str):
+    def call(self, query: str, conversation_history_str: Optional[str] = None):
         """
         Process a query using RAG.
 
         Args:
             query: The user's query
-
-        Returns:
-            Tuple of (RAGAnswer, retrieved_documents)
+            conversation_history_str: Optional conversation history as a formatted string
         """
         try:
-            retrieved_documents = self.retriever(query)
+            input_too_large = False
+            tokens = count_tokens(query, self.provider == 'ollama')
+            logger.info(f'Request size: {tokens} tokens')
+            if tokens > 8000:
+                logger.warning(f'Request exceeds recommended token limit ({tokens} > 7500)')
+                input_too_large = True
 
-            # Fill in the documents
-            retrieved_documents[0].documents = [
-                self.transformed_docs[doc_index]
-                for doc_index in retrieved_documents[0].doc_indices
-            ]
-            self.generator(
-                input=query,
-            )
+            context = ''
+            if not input_too_large:
+                retrieved_documents = self.retriever(query)
 
-            return retrieved_documents
+                # Fill in the documents
+                retrieved_documents[0].documents = [
+                    self.transformed_docs[doc_index]
+                    for doc_index in retrieved_documents[0].doc_indices
+                ]
+
+                documents = retrieved_documents[0].documents
+                logger.info(f'Retrieved {len(documents)} documents')
+
+                # Group documents by file path
+                sources = []
+                docs_by_file: dict = {}
+                for doc in documents:
+                    file_path = doc.meta_data.get('file_path', 'unknown')
+                    if file_path not in docs_by_file:
+                        docs_by_file[file_path] = []
+                    docs_by_file[file_path].append(doc)
+                    sources.append(file_path)
+
+                # Format context text with file path grouping
+                context_parts = []
+                for file_path, docs in docs_by_file.items():
+                    # Add file header with metadata
+                    header = f'## File Path: {file_path}\n\n'
+                    # Add document content
+                    content = '\n\n'.join([doc.text for doc in docs])
+
+                    context_parts.append(f'{header}{content}')
+
+                # Join all parts with clear separation
+                context = '\n\n' + '-' * 10 + '\n\n'.join(context_parts)
+
+                MIN_RELEVANT_DOCS = 1
+                MIN_SIMILARITY_SCORE = 0.2
+                if not documents or len(documents) < MIN_RELEVANT_DOCS or retrieved_documents[0].doc_scores[0] < MIN_SIMILARITY_SCORE:
+                    logger.info('Query is likely irrelevant to the repo. Returning default answer.')
+                    return {
+                        'answer': 'I’m sorry, but I cannot answer this question because it doesn’t appear to be related to the provided repository.',
+                        'sources': [],
+                    }
+
+            response = self.generator.call(
+                prompt_kwargs={
+                    'input_str': query,
+                    'contexts': context,
+                    'conversation_history': conversation_history_str,
+                },
+            ).data
+
+            return {
+                'answer': response.answer,
+                'sources': sources,
+            }
 
         except Exception as e:
             logger.error(f'Error in RAG call: {str(e)}')
-
-            # Create error response
-            error_response = ChatRAGAnswer(
-                rationale='Error occurred while processing the query.',
-                answer='I apologize, but I encountered an error while processing your question. Please try again or rephrase your question.',
-            )
-            return error_response, []
+            raise ValueError('Error processing query')

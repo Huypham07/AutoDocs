@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-from typing import Dict
-
 import adalflow as adal
 from domain.preparator.local_db_preparator import count_tokens
 from shared.logging import get_logger
@@ -162,7 +159,7 @@ IMPORTANT FORMATTING RULES:
 
             with open('rag_res.txt', 'a') as f:
                 f.write(response)
-            return response
+            return response.strip()
 
         except Exception as e:
             logger.error(f'Error in RAG call: {str(e)}')
