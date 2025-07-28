@@ -10,10 +10,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, AlertCircle, Loader2, Lock, Code } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { TaskBody, TaskResponse } from "@/schemas/task.schema";
+import { TaskBody, TaskResponse } from "@/types/task";
 import logo from "@/public/logo.png";
 import Image from "next/image";
 import { toast } from "sonner";
+import { toastMessage } from "@/utils/toast-message";
 
 export default function AutoDocs() {
   const [repoUrl, setRepoUrl] = useState("https://github.com/Huypham07/AutoDocs");
@@ -87,46 +88,17 @@ export default function AutoDocs() {
       const data: TaskResponse = await response.json();
       const { owner, repo_name } = extractRepoInfo(repoUrl);
       if (data.status === "completed") {
-        toast(data.message, {
-          duration: 3000,
-          className: "text-green-700",
-          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-          position: "top-center",
-          style: {
-            backgroundColor: "white",
-            outline: "1px solid #ccc",
-          },
-        });
+        toastMessage(data.message + " Redirecting to documentation...", "success");
 
+        localStorage.setItem("repo_url", repoUrl);
+        localStorage.setItem("access_token", accessToken);
         setTimeout(() => {
           router.push(`/generate/${owner}/${repo_name}`);
         }, 4000);
       } else if (data.status === "processing") {
-        toast(data.message, {
-          duration: 3000,
-          className: "text-green-700",
-          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-          position: "top-center",
-          style: {
-            backgroundColor: "white",
-            outline: "1px solid #ccc",
-          },
-        });
+        toastMessage(data.message, "info");
       } else {
-        toast(`Failed to fetch documentation: ${data.message}`, {
-          action: {
-            label: "Close",
-            onClick: () => toast.dismiss(),
-          },
-          duration: 3000,
-          className: "text-red-600",
-          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-          position: "top-center",
-          style: {
-            backgroundColor: "white",
-            outline: "1px solid #ccc",
-          },
-        });
+        toastMessage(`Failed to fetch documentation: ${data.message}`, "error");
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";

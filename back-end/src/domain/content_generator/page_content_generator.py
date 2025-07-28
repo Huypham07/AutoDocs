@@ -53,6 +53,7 @@ class PageContentGenerator(BaseContentGenerator):
             *   Do not focus too much on UI/Frontend components:
                 - Only describe how user interactions are handled if explicitly defined in the source files.
                 - skip every single UI element like card, button, alert, popup, label, etc.
+            *   Use paragraphs to write concise, clear explanations for each section. Only need to write descriptions for the main components, main modules, not every single file, class, or function.
 
         3.  **Architecture & Flow Diagrams**
             *   Use **Mermaid** diagrams extensively to visualize:
@@ -83,12 +84,10 @@ class PageContentGenerator(BaseContentGenerator):
 
         4.  **Tables:**
             *   Use Markdown tables to summarize information such as:
-                *   Key features or components and their descriptions.
-                *   API endpoint parameters, types, and descriptions.
-                *   Configuration options, their types, and default values.
-                *   Data model fields, types, constraints, and descriptions.
+                *   Key features or core modules, core services and their descriptions. Not every single file, class, or function.
+                *   Main API endpoint and descriptions.
 
-        5.  **Input / Output Summary**
+        5.  **Input / Output Summary (If need)**
                 *   Provide **Markdown tables** summarizing:
                     - Inputs accepted by the system/module (e.g., API payloads, config values, external triggers)
                     - Outputs or responses (e.g., returned data, emitted events, side effects)
@@ -101,6 +100,7 @@ class PageContentGenerator(BaseContentGenerator):
             *   Use the exact format: \`Sources: [filename.ext]\`. Multiple files can be cited: \`Sources: [file1.ext], [file2.ext], [dir/file3.ext]\`.
             *   If an entire section is overwhelmingly based on one or two files, you can cite them under the section heading in addition to more specific citations within the section.
             *   IMPORTANT: You MUST cite AT LEAST 5 different source files throughout the documentation page to ensure comprehensive coverage.
+            *   IMPORTANT: If source files contain identical files, only write them once. Files that are UI components like button, label, select, card do not need to be added to source files.
 
         7.  **Technical Accuracy:** All information must be derived SOLELY from the \`[RELEVANT_SOURCE_FILES]\`. Do not infer, invent, or use external knowledge about similar systems or common practices unless it's directly supported by the provided code. If information is not present in the provided files, do not include it or explicitly state its absence if crucial to the topic.
 
@@ -111,6 +111,7 @@ class PageContentGenerator(BaseContentGenerator):
         Remember:
         - Generate the content in English
         - Ground every claim in the provided source files.
+        - Do not generate too much whitespace or empty lines if not needed, such as: "you are writing        a documentation page".
         - Prioritize accuracy and direct representation of the code's functionality and structure.
         - All fenced code blocks (e.g., html, mermaid, bash, code, etc.) must be properly closed with a matching triple backtick (), even if the content is short. Partial or unclosed code blocks are strictly not allowed.
         - Structure the document logically for easy understanding by other developers.

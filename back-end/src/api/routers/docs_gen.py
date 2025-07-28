@@ -42,6 +42,14 @@ async def create_docs(request: DocsGenRequest, application: DocumentationApplica
 
         # Return message for existing documentation
         if response.is_existing:
+            if response.status == 'processing':
+                return DocsGenResponse(
+                    status=response.status,
+                    message='Documentation structure created. Page content generation has been queued for processing.',
+                    is_existing=response.is_existing,
+                    processing_time=response.processing_time,
+                    document_id=response.document_id,
+                )
             return DocsGenResponse(
                 status=response.status,
                 message='Documentation already exists for this repository.',

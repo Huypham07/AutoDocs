@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Code, ChevronDown, Download, Loader2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -11,26 +11,114 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
+import { toastMessage } from "@/utils/toast-message";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import logo from "@/public/logo.png";
 import Image from "next/image";
-import { DocumantationResponse, Section, Page } from "@/schemas/task.schema";
+import { DocumantationResponse, Section, Page } from "@/types/task";
 import Markdown from "@/components/Markdown";
+import { ChatInterface } from "@/components/chat-interface";
 
 export default function DocsDetails() {
   const params = useParams();
   const owner = params.owner as string;
   const repoName = params.repo as string;
 
+  const [repoUrl, setRepoUrl] = useState<string>("");
+  const [accessToken, setAccessToken] = useState<string>("");
   const [docMode, setDocMode] = useState<"view" | "ask">("view");
   const [docTypeLoading, setDocTypeLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [documentation, setDocumentation] = useState<DocumantationResponse | null>(null);
   const [allSectionIds, setAllSectionIds] = useState<string[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = useCallback(
+    async (format: "pdf" | "md") => {
+      if (!documentation) {
+        toastMessage("No documentation available for export.", "error");
+        return;
+      }
+
+      try {
+        setIsExporting(true);
+
+        const generatedPages: Record<string, Page> = {};
+        documentation.root_sections.forEach((section) => {
+          section.pages.forEach((page) => {
+            const content = page.content || "Content not generated";
+            generatedPages[page.page_id] = {
+              ...page,
+              content,
+            };
+          });
+          section.subsections.forEach((subsection) => {
+            subsection.pages.forEach((page) => {
+              generatedPages[page.page_id] = page;
+            });
+          });
+        });
+
+        const sortedPageIds = Object.keys(generatedPages).sort((a, b) => a.localeCompare(b));
+        const pagesToExport = sortedPageIds.map((id) => generatedPages[id]);
+
+        // Make API call to export wiki
+        const response = await fetch(`/api/export/format`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            repo_name: repoName,
+            pages: pagesToExport,
+            format,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "No error details available");
+          throw new Error(`Error exporting documentation: ${response.status} - ${errorText}`);
+        }
+
+        // Get the filename from the Content-Disposition header if available
+        const contentDisposition = response.headers.get("Content-Disposition");
+        let filename = `${repoName}_doc.${format}`;
+
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename=(.+)/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/"/g, "");
+          }
+        }
+
+        // Convert the response to a blob and download it
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (err) {
+        console.error("Error exporting documentation:", err);
+        toastMessage("Failed to export documentation", "error");
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [documentation]
+  );
 
   const router = useRouter();
+
+  // Initialize localStorage values on client side
+  useEffect(() => {
+    setRepoUrl(localStorage.getItem("repo_url") || "");
+    setAccessToken(localStorage.getItem("access_token") || "");
+  }, []);
 
   const goHome = () => {
     router.push("/");
@@ -234,29 +322,6 @@ export default function DocsDetails() {
     );
   };
 
-  const exportAsMarkdown = () => handleExport("md");
-  const exportAsPDF = () => handleExport("pdf");
-  const exportAsDocs = () => handleExport("docx");
-
-  const handleExport = (format: "docx" | "pdf" | "md") => {
-    toast("This feature is currently under development.", {
-      description: `Exporting to ${format.toUpperCase()} will be available soon.`,
-      action: {
-        label: "Close",
-        onClick: () => toast.dismiss(),
-      },
-      duration: 3000,
-      className: "text-red-600",
-      actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-      position: "top-center",
-      descriptionClassName: "text-gray-700",
-      style: {
-        backgroundColor: "white",
-        outline: "1px solid #ccc",
-      },
-    });
-  };
-
   useEffect(() => {
     const fetchDocumentation = async () => {
       try {
@@ -270,25 +335,13 @@ export default function DocsDetails() {
         if (response.ok) {
           const data: DocumantationResponse = await response.json();
           setDocumentation(data);
+          setRepoUrl(data.repo_url);
           const pageIds = collectPageIds(data.root_sections);
           setAllSectionIds(pageIds);
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
-        toast(`Failed to fetch documentation: ${errorMessage}`, {
-          action: {
-            label: "Close",
-            onClick: () => toast.dismiss(),
-          },
-          duration: 3000,
-          className: "text-red-600",
-          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-          position: "top-center",
-          style: {
-            backgroundColor: "white",
-            outline: "1px solid #ccc",
-          },
-        });
+        toastMessage(`Failed to fetch documentation: ${errorMessage}`, "error");
       } finally {
         setLoading(false);
       }
@@ -388,14 +441,15 @@ export default function DocsDetails() {
                     </div>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem className="cursor-pointer" onClick={exportAsMarkdown}>
+                    <DropdownMenuItem
+                      className={`cursor-pointer ${isExporting ? "disabled" : ""}`}
+                      onClick={() => handleExport("md")}>
                       Export as Markdown
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer" onClick={exportAsPDF}>
+                    <DropdownMenuItem
+                      className={`cursor-pointer ${isExporting ? "disabled" : ""}`}
+                      onClick={() => handleExport("pdf")}>
                       Export as PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer" onClick={exportAsDocs}>
-                      Export as Docs
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -406,44 +460,31 @@ export default function DocsDetails() {
       </header>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Left Pane - Content */}
-          <div className="lg:col-span-4">
-            {docMode === "view" ? (
-              renderContent()
-            ) : (
-              <div className="flex items-center justify-center h-96">
-                <div className="text-center">
-                  <div className="text-6xl mb-4">🚧</div>
-                  <h3 className="text-xl font-semibold mb-2">This section is under development</h3>
-                  <p className="text-muted-foreground">Low-level code documentation will be available soon.</p>
-                </div>
-              </div>
-            )}
-          </div>
+      {docMode === "view" ? (
+        <div className="container mx-auto px-4 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            {/* Left Pane - Content */}
+            <div className="lg:col-span-4">{renderContent()}</div>
 
-          {/* Right Pane - TOC */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-[73px] h-fit">
-              <div className="space-y-2">
-                {docMode === "view" && documentation ? (
+            {/* Right Pane - TOC */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-[73px] h-fit">
+                <div className="space-y-2">
                   <>
                     {documentation.root_sections
                       .sort((a, b) => a.section_id.localeCompare(b.section_id))
                       .map((section) => renderDocumentationItem(section))}
                   </>
-                ) : (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Code className="w-8 h-8 mx-auto mb-2" />
-                    <p className="text-sm">Code documentation coming soon</p>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="container mx-auto px-4 py-6 h-full">
+          <ChatInterface repoUrl={repoUrl} accessToken={accessToken} />
+        </div>
+      )}
     </div>
   );
 }
