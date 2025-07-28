@@ -7,6 +7,7 @@ faiss-cpu>=1.7.4
 fastapi[standard]
 google-generativeai>=0.3.0
 jinja2>=3.1.2
+markdown>=3.4.0
 motor==3.3.2
 nltk
 numpy
@@ -18,6 +19,7 @@ pymongo==4.6.1
 pytest
 python-dotenv
 pyyaml
+reportlab>=3.6.0
 rouge-score
 structlog==22.3.0
 uvicorn[standard]

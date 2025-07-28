@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Code, ChevronDown, Download, Loader2 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
+import { toastMessage } from "@/utils/toast-message";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import logo from "@/public/logo.png";
 import Image from "next/image";
@@ -26,12 +26,91 @@ export default function DocsDetails() {
 
   const [repoUrl, setRepoUrl] = useState<string>("");
   const [accessToken, setAccessToken] = useState<string>("");
-  const [docMode, setDocMode] = useState<"view" | "ask">("ask");
+  const [docMode, setDocMode] = useState<"view" | "ask">("view");
   const [docTypeLoading, setDocTypeLoading] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [documentation, setDocumentation] = useState<DocumantationResponse | null>(null);
   const [allSectionIds, setAllSectionIds] = useState<string[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = useCallback(
+    async (format: "pdf" | "md") => {
+      if (!documentation) {
+        toastMessage("No documentation available for export.", "error");
+        return;
+      }
+
+      try {
+        setIsExporting(true);
+
+        const generatedPages: Record<string, Page> = {};
+        documentation.root_sections.forEach((section) => {
+          section.pages.forEach((page) => {
+            const content = page.content || "Content not generated";
+            generatedPages[page.page_id] = {
+              ...page,
+              content,
+            };
+          });
+          section.subsections.forEach((subsection) => {
+            subsection.pages.forEach((page) => {
+              generatedPages[page.page_id] = page;
+            });
+          });
+        });
+
+        const sortedPageIds = Object.keys(generatedPages).sort((a, b) => a.localeCompare(b));
+        const pagesToExport = sortedPageIds.map((id) => generatedPages[id]);
+
+        // Make API call to export wiki
+        const response = await fetch(`/api/export/format`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            repo_name: repoName,
+            pages: pagesToExport,
+            format,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "No error details available");
+          throw new Error(`Error exporting documentation: ${response.status} - ${errorText}`);
+        }
+
+        // Get the filename from the Content-Disposition header if available
+        const contentDisposition = response.headers.get("Content-Disposition");
+        let filename = `${repoName}_doc.${format}`;
+
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename=(.+)/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/"/g, "");
+          }
+        }
+
+        // Convert the response to a blob and download it
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (err) {
+        console.error("Error exporting documentation:", err);
+        toastMessage("Failed to export documentation", "error");
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [documentation]
+  );
 
   const router = useRouter();
 
@@ -243,29 +322,6 @@ export default function DocsDetails() {
     );
   };
 
-  const exportAsMarkdown = () => handleExport("md");
-  const exportAsPDF = () => handleExport("pdf");
-  const exportAsDocs = () => handleExport("docx");
-
-  const handleExport = (format: "docx" | "pdf" | "md") => {
-    toast("This feature is currently under development.", {
-      description: `Exporting to ${format.toUpperCase()} will be available soon.`,
-      action: {
-        label: "Close",
-        onClick: () => toast.dismiss(),
-      },
-      duration: 3000,
-      className: "text-red-600",
-      actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-      position: "top-center",
-      descriptionClassName: "text-gray-700",
-      style: {
-        backgroundColor: "white",
-        outline: "1px solid #ccc",
-      },
-    });
-  };
-
   useEffect(() => {
     const fetchDocumentation = async () => {
       try {
@@ -285,20 +341,7 @@ export default function DocsDetails() {
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
-        toast(`Failed to fetch documentation: ${errorMessage}`, {
-          action: {
-            label: "Close",
-            onClick: () => toast.dismiss(),
-          },
-          duration: 3000,
-          className: "text-red-600",
-          actionButtonStyle: { backgroundColor: "ButtonShadow", color: "black" },
-          position: "top-center",
-          style: {
-            backgroundColor: "white",
-            outline: "1px solid #ccc",
-          },
-        });
+        toastMessage(`Failed to fetch documentation: ${errorMessage}`, "error");
       } finally {
         setLoading(false);
       }
@@ -398,14 +441,15 @@ export default function DocsDetails() {
                     </div>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem className="cursor-pointer" onClick={exportAsMarkdown}>
+                    <DropdownMenuItem
+                      className={`cursor-pointer ${isExporting ? "disabled" : ""}`}
+                      onClick={() => handleExport("md")}>
                       Export as Markdown
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer" onClick={exportAsPDF}>
+                    <DropdownMenuItem
+                      className={`cursor-pointer ${isExporting ? "disabled" : ""}`}
+                      onClick={() => handleExport("pdf")}>
                       Export as PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer" onClick={exportAsDocs}>
-                      Export as Docs
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

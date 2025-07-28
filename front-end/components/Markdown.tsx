@@ -16,6 +16,14 @@ function sanitizeMermaidPlaceholders(mermaidCode: string) {
   });
 }
 
+function normalizeCodeContent(codeContent: string) {
+  if (codeContent.includes("flowchart TD")) {
+    console.log("Detected flowchart in code block, normalizing...");
+    return codeContent.replaceAll("->>", "-->");
+  }
+  return codeContent;
+}
+
 const Markdown: React.FC<MarkdownProps> = ({ content }) => {
   // Define markdown components
   const MarkdownComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
@@ -178,12 +186,13 @@ const Markdown: React.FC<MarkdownProps> = ({ content }) => {
       const { inline, className, children, ...otherProps } = props;
       const match = /language-(\w+)/.exec(className || "");
       const codeContent = sanitizeMermaidPlaceholders(children ? String(children).replace(/\n$/, "") : "");
+      const normalizedCodeContent = normalizeCodeContent(codeContent);
 
       // Handle Mermaid diagrams
       if (!inline && match && match[1] === "mermaid") {
         return (
           <div className="my-8 bg-gray-50 dark:bg-gray-800 rounded-md overflow-hidden shadow-sm">
-            <Mermaid chart={codeContent} className="w-full max-w-full" zoomingEnabled={true} />
+            <Mermaid chart={normalizedCodeContent} className="w-full max-w-full" zoomingEnabled={true} />
           </div>
         );
       }
