@@ -7,7 +7,8 @@ import sys
 from application.documentation import DocumentationApplication
 from domain.content_generator import PageContentGenerator
 from domain.outline_generator import OutlineGenerator
-from domain.preparator import LocalDBPreparator
+from domain.preparator import ArchitecturePipelinePreparator
+from domain.preparator import PipelineConfig
 from domain.rag import StructureRAG
 from infra.mongo.core import close_mongo_connection
 from infra.mongo.core import connect_to_mongo
@@ -36,14 +37,23 @@ class DocumentationWorker:
             # Initialize all dependencies (similar to your FastAPI app setup)
             documentation_repository = DocumentationRepository()
             rag = StructureRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
-            local_db_preparator = LocalDBPreparator()
+
+            # Create architecture pipeline preparator with configuration
+            pipeline_config = PipelineConfig(
+                target_clusters=10,
+                perform_validation=True,
+                save_intermediate_results=False,  # Don't save intermediate files in worker
+                output_directory='worker_pipeline_output',
+            )
+            architecture_preparator = ArchitecturePipelinePreparator(pipeline_config)
+
             outline_generator = OutlineGenerator()
             page_content_generator = PageContentGenerator()
 
             # Create DocumentationApplication (without rabbitmq_publisher for worker)
             self.documentation_app = DocumentationApplication(
                 rag=rag,
-                local_db_preparator=local_db_preparator,
+                architecture_preparator=architecture_preparator,
                 outline_generator=outline_generator,
                 page_content_generator=page_content_generator,
                 documentation_repository=documentation_repository,
@@ -57,7 +67,7 @@ class DocumentationWorker:
             logger.info('Worker setup completed successfully')
 
         except Exception as e:
-            logger.error(f"Failed to setup worker: {str(e)}")
+            logger.error(f'Failed to setup worker: {str(e)}')
             raise
 
     async def start(self):
@@ -74,7 +84,7 @@ class DocumentationWorker:
                 await asyncio.sleep(1)
 
         except Exception as e:
-            logger.error(f"Worker error: {str(e)}")
+            logger.error(f'Worker error: {str(e)}')
             raise
 
     async def stop(self):
@@ -90,7 +100,7 @@ class DocumentationWorker:
 
     def signal_handler(self, signum, frame):
         """Handle shutdown signals."""
-        logger.info(f"Received signal {signum}, shutting down...")
+        logger.info(f'Received signal {signum}, shutting down...')
         asyncio.create_task(self.stop())
 
 
@@ -108,7 +118,7 @@ async def main():
     except KeyboardInterrupt:
         logger.info('Received keyboard interrupt')
     except Exception as e:
-        logger.error(f"Worker failed: {str(e)}")
+        logger.error(f'Worker failed: {str(e)}')
         sys.exit(1)
     finally:
         await worker.stop()

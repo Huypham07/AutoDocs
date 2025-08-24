@@ -59,8 +59,8 @@ services:
       - autodocs-network
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: rabbitmq
+    image: rabbitmq:4.1.2-management
+    container_name: autodoc-rabbitmq
     restart: unless-stopped
     ports:
       - "5672:5672" # AMQP protocol port (used by Celery or other workers)

@@ -13,8 +13,7 @@ from domain.content_generator import ContentGeneratorInput
 from domain.content_generator import PageContentGenerator
 from domain.outline_generator import OutlineGenerator
 from domain.outline_generator import OutlineGeneratorInput
-from domain.preparator import LocalDBPreparator
-from domain.preparator import PreparatorInput
+from domain.preparator import ArchitecturePipelinePreparator
 from domain.rag import StructureRAG
 from infra.mongo.documentation_repository import DocumentationRepository
 from infra.rabbitmq.publisher import RabbitMQPublisher
@@ -32,27 +31,41 @@ class DocumentationApplication:
     def __init__(
         self,
         rag: StructureRAG,
-        local_db_preparator: LocalDBPreparator,
+        architecture_preparator: ArchitecturePipelinePreparator,
         outline_generator: OutlineGenerator,
         page_content_generator: PageContentGenerator,
         documentation_repository: DocumentationRepository,
         rabbitmq_publisher: RabbitMQPublisher,
     ):
         self.rag = rag
-        self.local_db_preparator = local_db_preparator
+        self.architecture_preparator = architecture_preparator
         self.outline_generator = outline_generator
         self.page_content_generator = page_content_generator
         self.documentation_repository = documentation_repository
         self.rabbitmq_publisher = rabbitmq_publisher
+        self.pipeline_results = None  # Store the architecture pipeline results
 
-    def prepare(self, preparator_input: PreparatorInput):
+    def prepare(self, repo_url: str, access_token: Optional[str] = None):
         """Prepare the application for documentation generation."""
         logger.info('Preparing for documentation generation...')
-        transformed_docs = self.local_db_preparator.prepare(preparator_input)
+
+        # Run the architecture pipeline preparation
+        transformed_docs = self.architecture_preparator.prepare(
+            repo_url=repo_url,
+            access_token=access_token,
+        )
+
+        # Get the pipeline results which contain the enriched graph and RAG-optimized data
+        if not self.architecture_preparator.get_results():
+            raise RuntimeError('Architecture pipeline preparation failed - no results available')
+
+        # Prepare RAG with the enriched data from the pipeline
         self.rag.prepare_retriever(transformed_docs)
 
+        # Prepare generators with RAG
         self.outline_generator.prepare_rag(self.rag)
         self.page_content_generator.prepare_rag(self.rag)
+
         logger.info('Preparation complete for documentation generation.')
 
     async def process(self, generator_input: GeneratorInput) -> GeneratorOutput:
@@ -75,12 +88,7 @@ class DocumentationApplication:
                     processing_time=processing_time,
                 )
 
-            self.prepare(
-                PreparatorInput(
-                    repo_url=repo_url,
-                    access_token=access_token,
-                ),
-            )
+            self.prepare(repo_url=repo_url, access_token=access_token)
 
             logger.info('Generating documentation...')
 
@@ -175,10 +183,8 @@ class DocumentationApplication:
 
             # Prepare RAG if needed (might need to optimize this)
             self.prepare(
-                PreparatorInput(
-                    repo_url=task.repo_url,
-                    access_token=task.access_token,
-                ),
+                repo_url=task.repo_url,
+                access_token=task.access_token,
             )
 
             # Create a page object for content generation
