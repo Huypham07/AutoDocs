@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field
-from typing import Any
 from typing import List
 from typing import Optional
 
 import adalflow as adal
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 from adalflow.core.types import Document
-from domain.preparator.local_db_preparator import count_tokens
 from shared.logging import get_logger
 from shared.settings.advanced_configs import configs
 from shared.settings.advanced_configs import get_generator_model_config
@@ -316,11 +314,11 @@ IMPORTANT FORMATTING RULES:
         """
         try:
             input_too_large = False
-            tokens = count_tokens(query, self.provider == 'ollama')
-            logger.info(f'Request size: {tokens} tokens')
-            if tokens > 8000:
-                logger.warning(f'Request exceeds recommended token limit ({tokens} > 7500)')
-                input_too_large = True
+            # tokens = count_tokens(query, self.provider == 'ollama')
+            # logger.info(f'Request size: {tokens} tokens')
+            # if tokens > 8000:
+            #     logger.warning(f'Request exceeds recommended token limit ({tokens} > 7500)')
+            #     input_too_large = True
 
             context = ''
             if not input_too_large:

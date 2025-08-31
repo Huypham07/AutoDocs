@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from abc import ABC
 from abc import abstractmethod
+from typing import List
 from typing import Optional
 
-from adalflow.core.types import Document
-from adalflow.core.types import List
+from langchain.schema import Document
 
 
 class BasePreparator(ABC):
