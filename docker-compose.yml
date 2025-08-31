@@ -1,13 +1,40 @@
 services:
+  # Neo4j Graph Database
+  neo4j:
+    image: neo4j:5.15
+    container_name: autodocs-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"  # HTTP browser interface
+      - "7687:7687"  # Bolt protocol
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["graph-data-science"]
+      - NEO4J_dbms_security_procedures_unrestricted=gds.*
+      - NEO4J_dbms_memory_heap_initial_size=512m
+      - NEO4J_dbms_memory_heap_max_size=2G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    deploy:
+      resources:
+        limits:
+          memory: 2.5G
+    networks:
+      - autodocs-network
+
   # MongoDB Database
   mongo:
     image: mongo
-    container_name: mongo
+    container_name: autodocs-mongo
     restart: unless-stopped
     ports:
       - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=autodocs
     volumes:
       - mongo_data:/data/db
+      - mongo_config:/data/configdb
     deploy:
       resources:
         limits:
@@ -15,15 +42,17 @@ services:
     networks:
       - autodocs-network
 
+  # MongoDB Admin Interface
   mongo-express:
     image: mongo-express
-    container_name: mongo-express
+    container_name: autodocs-mongo-express
     restart: unless-stopped
     ports:
-      - 8081:8081
+      - "8081:8081"
     environment:
       - ME_CONFIG_MONGODB_SERVER=mongo
       - ME_CONFIG_BASICAUTH=false
+      - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/autodocs
     depends_on:
       - mongo
     deploy:
@@ -33,10 +62,10 @@ services:
     networks:
       - autodocs-network
 
-  # Ollama
+  # Local LLM Server
   ollama:
     image: ollama/ollama
-    container_name: ollama
+    container_name: autodocs-ollama
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -49,7 +78,7 @@ services:
       resources:
         limits:
           memory: 4G
-    entrypoint: [ "/bin/bash", "-c" ]
+    entrypoint: ["/bin/bash", "-c"]
     command: |
       "ollama serve &
       sleep 10
@@ -58,22 +87,27 @@ services:
     networks:
       - autodocs-network
 
+  # Message Queue
   rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: rabbitmq
+    image: rabbitmq:4.1.2-management
+    container_name: autodocs-rabbitmq
     restart: unless-stopped
     ports:
-      - "5672:5672" # AMQP protocol port (used by Celery or other workers)
-      - "15672:15672" # RabbitMQ Management UI
+      - "5672:5672"   # AMQP protocol
+      - "15672:15672" # Management UI
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     deploy:
       resources:
         limits:
           memory: 1G
     networks:
       - autodocs-network
+    profiles:
+      - full  # Optional service for advanced features
   # autodocs-backend:
   #   build:
   #     context: ./back-end
@@ -98,5 +132,15 @@ networks:
     driver: bridge
 
 volumes:
-  ollama_data:
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
   mongo_data:
+    driver: local
+  mongo_config:
+    driver: local
+  ollama_data:
+    driver: local
+  rabbitmq_data:
+    driver: local

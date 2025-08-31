@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 
 import requests
-from domain.rag import StructureRAG
+from domain.rag import GraphRAG
 from shared.logging import get_logger
 from shared.utils import is_github_repo
 
@@ -17,7 +17,7 @@ class OutlineGenerator(BaseOutlineGenerator):
     def __init__(self):
         self.rag = None
 
-    def prepare_rag(self, rag: StructureRAG):
+    def prepare_rag(self, rag: GraphRAG):
         """Prepare the RAG instance for content generation."""
         self.rag = rag
 
@@ -171,8 +171,9 @@ class OutlineGenerator(BaseOutlineGenerator):
         4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters
         """
 
-        rag_res = self.rag.call(
-            query=query,
+        rag_res = self.rag.query(
+            question=query,
+            repo_url=repo_url,
         )
 
         return rag_res

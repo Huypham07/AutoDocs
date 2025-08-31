@@ -13,10 +13,11 @@ from domain.content_generator import ContentGeneratorInput
 from domain.content_generator import PageContentGenerator
 from domain.outline_generator import OutlineGenerator
 from domain.outline_generator import OutlineGeneratorInput
-from domain.preparator import LocalDBPreparator
-from domain.preparator import PreparatorInput
-from domain.rag import StructureRAG
+from domain.preparator import PipelinePreparator
+from domain.rag import GraphRAG
 from infra.mongo.documentation_repository import DocumentationRepository
+from infra.neo4j.graph_population_service import GraphPopulationService
+from infra.neo4j.graph_repository import GraphRepository as Neo4jGraphRepository
 from infra.rabbitmq.publisher import RabbitMQPublisher
 from shared.logging import get_logger
 from shared.utils import extract_repo_info
@@ -31,28 +32,67 @@ logger = get_logger(__name__)
 class DocumentationApplication:
     def __init__(
         self,
-        rag: StructureRAG,
-        local_db_preparator: LocalDBPreparator,
+        rag: GraphRAG,
+        pipeline_preparator: PipelinePreparator,
         outline_generator: OutlineGenerator,
         page_content_generator: PageContentGenerator,
         documentation_repository: DocumentationRepository,
+        graph_population_service: GraphPopulationService,
         rabbitmq_publisher: RabbitMQPublisher,
     ):
         self.rag = rag
-        self.local_db_preparator = local_db_preparator
+        self.pipeline_preparator = pipeline_preparator
         self.outline_generator = outline_generator
         self.page_content_generator = page_content_generator
         self.documentation_repository = documentation_repository
+        self.graph_population_service = graph_population_service
         self.rabbitmq_publisher = rabbitmq_publisher
+        self.pipeline_results = None
 
-    def prepare(self, preparator_input: PreparatorInput):
+    def prepare(self, repo_url: str, access_token: Optional[str] = None):
         """Prepare the application for documentation generation."""
         logger.info('Preparing for documentation generation...')
-        transformed_docs = self.local_db_preparator.prepare(preparator_input)
-        self.rag.prepare_retriever(transformed_docs)
 
-        self.outline_generator.prepare_rag(self.rag)
-        self.page_content_generator.prepare_rag(self.rag)
+        # Clear existing data first
+        try:
+            self.graph_population_service._clear_repository_data(repo_url)
+            logger.info('Cleared existing repository data')
+        except Exception as e:
+            logger.warning(f'Error clearing repository data: {e}')
+
+        # Run the architecture pipeline preparation
+        self.pipeline_preparator.prepare(
+            repo_url=repo_url,
+            access_token=access_token,
+        )
+
+        # Get the pipeline results which contain the enriched graph and RAG-optimized data
+        self.pipeline_results = self.pipeline_preparator.get_results()
+        if not self.pipeline_results:
+            raise RuntimeError('Pipeline preparation failed - no results available')
+
+        # Populate Neo4j graph with pipeline results
+        success = self.graph_population_service.populate_from_pipeline(self.pipeline_results)
+        if not success:
+            logger.error('Failed to populate Neo4j graph')
+            raise RuntimeError('Graph population failed')
+
+        logger.info('Successfully populated Neo4j graph with architecture data')
+
+        # Verify population worked
+        population_status = self.graph_population_service.get_population_status(repo_url)
+        logger.info(f'Population verification: {population_status}')
+
+        # Prepare generators with graph RAG system
+        self._prepare_generators_with_graph_rag()
+
+    def _prepare_generators_with_graph_rag(self):
+        """Prepare generators to use graph RAG system."""
+        if hasattr(self.outline_generator, 'prepare_rag'):
+            self.outline_generator.prepare_rag(self.rag)
+        if hasattr(self.page_content_generator, 'prepare_rag'):
+            self.page_content_generator.prepare_rag(self.rag)
+
         logger.info('Preparation complete for documentation generation.')
 
     async def process(self, generator_input: GeneratorInput) -> GeneratorOutput:
@@ -75,13 +115,7 @@ class DocumentationApplication:
                     processing_time=processing_time,
                 )
 
-            self.prepare(
-                PreparatorInput(
-                    repo_url=repo_url,
-                    access_token=access_token,
-                ),
-            )
-
+            self.prepare(repo_url=repo_url, access_token=access_token)
             logger.info('Generating documentation...')
 
             outline = self.outline_generator.generate(
@@ -175,10 +209,8 @@ class DocumentationApplication:
 
             # Prepare RAG if needed (might need to optimize this)
             self.prepare(
-                PreparatorInput(
-                    repo_url=task.repo_url,
-                    access_token=task.access_token,
-                ),
+                repo_url=task.repo_url,
+                access_token=task.access_token,
             )
 
             # Create a page object for content generation
@@ -226,7 +258,107 @@ class DocumentationApplication:
         except Exception as e:
             logger.error(f'Error processing page {task.page.page_title}: {str(e)}')
 
-    # existing documentation methods
+    # Graph RAG query methods for documentation generation
+
+    def get_architecture_overview(self, repo_url: str) -> str:
+        """Get architecture overview using LangChain Graph RAG."""
+        if not self.rag:
+            return 'Architecture analysis not available - Graph RAG not initialized'
+
+        question = 'Provide a comprehensive architecture overview including system design, key components, and architectural patterns.'
+        return self.rag.query(
+            question=question,
+            repo_url=repo_url,
+            query_type='system_overview',
+        )
+
+    def get_module_details(self, repo_url: str, module_name: str) -> str:
+        """Get detailed module information using Graph RAG."""
+        if not self.rag:
+            return f'Module details for {module_name} not available - Graph RAG not initialized'
+
+        question = f'Provide comprehensive details about the {module_name} module including its responsibilities, dependencies, and implementation.'
+        return self.rag.query(
+            question=question,
+            repo_url=repo_url,
+            query_type='module_details',
+            target=module_name,
+        )
+
+    def get_data_flow_analysis(self, repo_url: str, component: Optional[str] = None) -> str:
+        """Get data flow analysis using Graph RAG."""
+        if not self.rag:
+            return 'Data flow analysis not available - Graph RAG not initialized'
+
+        if component:
+            question = f'Analyze data flows for {component} including data processing, transformations, and flow patterns.'
+        else:
+            question = "Analyze the system's data flows, processing pipelines, and data architecture."
+
+        return self.rag.query(
+            question=question,
+            repo_url=repo_url,
+            query_type='data_flows',
+            target=component,
+        )
+
+    def get_communication_patterns(self, repo_url: str, component: Optional[str] = None) -> str:
+        """Get communication patterns using Graph RAG."""
+        if not self.rag:
+            return 'Communication patterns not available - Graph RAG not initialized'
+
+        if component:
+            question = f'Describe communication patterns for {component} including APIs, protocols, and integration points.'
+        else:
+            question = "Describe the system's communication patterns, service interactions, and integration architecture."
+
+        return self.rag.query(
+            question=question,
+            repo_url=repo_url,
+            query_type='communication_patterns',
+            target=component,
+        )
+
+    def get_technology_stack_info(self, repo_url: str) -> str:
+        """Get technology stack information using Graph RAG."""
+        if not self.rag:
+            return 'Technology stack information not available - Graph RAG not initialized'
+
+        question = 'Describe the complete technology stack including programming languages, frameworks, libraries, databases, and tools.'
+        return self.rag.query(
+            question=question,
+            repo_url=repo_url,
+            query_type='technology_stack',
+        )
+
+    def get_cluster_analysis(self, repo_url: str, cluster_name: Optional[str] = None) -> str:
+        """Get cluster analysis using Graph RAG."""
+        if not self.rag:
+            return 'Cluster analysis not available - Graph RAG not initialized'
+
+        if cluster_name:
+            question = f'Analyze the {cluster_name} cluster including its components, purpose, and architectural role.'
+        else:
+            question = "Analyze the system's logical clusters, component groupings, and modular organization."
+
+        return self.rag.query(
+            question=question,
+            repo_url=repo_url,
+            query_type='cluster_analysis',
+            target=cluster_name,
+        )
+
+    def get_dependency_analysis(self, repo_url: str) -> str:
+        """Get dependency analysis using Graph RAG."""
+        if not self.rag:
+            return 'Dependency analysis not available - Graph RAG not initialized'
+
+        question = 'Analyze system dependencies including coupling analysis, dependency chains, and architectural quality metrics.'
+        return self.rag.query(
+            question=question,
+            repo_url=repo_url,
+            query_type='dependencies',
+        )
 
     async def get_documentation_by_repo_url(self, repo_url: str):
         """Get documentation by repository URL."""

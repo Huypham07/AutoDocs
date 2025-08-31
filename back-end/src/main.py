@@ -6,10 +6,11 @@ import uvicorn
 from api.routers.api_routers import routers
 from domain.content_generator import PageContentGenerator
 from domain.outline_generator import OutlineGenerator
-from domain.preparator import LocalDBPreparator
+from domain.preparator import PipelineConfig
+from domain.preparator import PipelinePreparator
 from domain.rag import ChatRAG
-from domain.rag import StructureRAG
 from fastapi import FastAPI
+from infra.graph_factory import GraphRepositoryFactory
 from infra.mongo.core import close_mongo_connection
 from infra.mongo.core import connect_to_mongo
 from infra.mongo.documentation_repository import DocumentationRepository
@@ -30,9 +31,19 @@ async def lifespan(app: FastAPI):
     logger.info('Initializing domain services...')
     await connect_to_mongo()
 
-    app.state.structure_rag = StructureRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
+    app.state.rag = GraphRepositoryFactory.create_langchain_rag()
+    app.state.graph_population_service = GraphRepositoryFactory.create_population_service()
     app.state.chat_rag = ChatRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
-    app.state.local_db_preparator = LocalDBPreparator()
+
+    # Create architecture pipeline preparator with configuration
+    pipeline_config = PipelineConfig(
+        target_clusters=10,
+        perform_validation=True,
+        save_intermediate_results=False,  # Don't save intermediate files in production
+        output_directory='api_pipeline_output',
+    )
+    app.state.pipeline_preparator = PipelinePreparator(pipeline_config)
+
     app.state.outline_generator = OutlineGenerator()
     app.state.page_content_generator = PageContentGenerator()
     app.state.documentation_repository = DocumentationRepository()
