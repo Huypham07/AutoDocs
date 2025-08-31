@@ -5,18 +5,15 @@ from typing import Optional
 
 from api.models.chat import ChatRequest
 from api.models.chat import ChatResponse
-from domain.preparator import LocalDBPreparator
 from domain.rag import ChatRAG
 
 
 class ChatApplication:
-    def __init__(self, rag: ChatRAG, local_db_preparator: LocalDBPreparator):
+    def __init__(self, rag: ChatRAG):
         self.rag = rag
-        self.local_db_preparator = local_db_preparator
 
     def prepare(self, repo_url: str, access_token: Optional[str] = None):
-        transformed_docs = self.local_db_preparator.prepare(repo_url, access_token)
-        self.rag.prepare_retriever(transformed_docs)
+        pass
 
     async def process(self, request: ChatRequest) -> ChatResponse:
         # Validate input

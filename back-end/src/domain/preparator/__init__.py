@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from .architecture_pipeline import ArchitecturePipelinePreparator
-from .architecture_pipeline import PipelineConfig
 from .base import BasePreparator
 from .graph_builder import GraphBuilder
 from .graph_builder import GraphEdge
@@ -12,7 +10,8 @@ from .graph_enhancer import GraphEnhancer
 from .hierarchical_clustering import ClusteringResults
 from .hierarchical_clustering import HierarchicalClusterer
 from .hierarchical_clustering import ModuleCluster
-from .local_db_preparator import LocalDBPreparator
+from .pipeline import PipelineConfig
+from .pipeline import PipelinePreparator
 from .rag_serializer import ClusterSummary
 from .rag_serializer import ModuleSummary
 from .rag_serializer import RAGOptimizedData
@@ -23,8 +22,7 @@ from .validation import ValidationReport
 
 __all__ = [
     'BasePreparator',
-    'LocalDBPreparator',
-    'ArchitecturePipelinePreparator',
+    'PipelinePreparator',
     'PipelineConfig',
     'GraphBuilder',
     'MultiModalGraph',

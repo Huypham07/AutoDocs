@@ -1,9 +1,3 @@
-"""
-Multi-modal graph construction for code architecture analysis.
-
-This module builds comprehensive graphs that capture different types of relationships
-between code components: syntactic, semantic, structural, and dependency-based.
-"""
 from __future__ import annotations
 
 import ast
@@ -22,11 +16,19 @@ from typing import Set
 from typing import Tuple
 from typing import Union
 
-import numpy as np
 from shared.logging import get_logger
 
-from .ast_parser import CodeComponent
 from .ast_parser import DependencyParser
+
+logger = get_logger(__name__)
+
+# Try to import multi-language parser, fallback to Python-only
+try:
+    from .tree_sitter_parser import MultiLanguageDependencyParser
+    MULTI_LANGUAGE_SUPPORT = True
+except ImportError:
+    MULTI_LANGUAGE_SUPPORT = False
+    logger.warning('Multi-language support not available. Install tree-sitter for full language support.')
 
 logger = get_logger(__name__)
 
@@ -255,53 +257,70 @@ class MultiModalGraph:
 class GraphBuilder:
     """
     Builds multi-modal graphs from code repositories by extracting different types of relationships.
+    Supports multiple programming languages via tree-sitter when available.
     """
 
-    def __init__(self, repo_path: str):
+    def __init__(self, repo_path: str, use_multi_language: bool = True):
         self.repo_path = os.path.abspath(repo_path)
         self.graph = MultiModalGraph()
-        self.dependency_parser = DependencyParser(repo_path)
+        self.use_multi_language = use_multi_language and MULTI_LANGUAGE_SUPPORT
+
+        # Initialize appropriate parser
+        if self.use_multi_language:
+            logger.info('Using multi-language parser with tree-sitter')
+            self.dependency_parser: Union[MultiLanguageDependencyParser, DependencyParser] = MultiLanguageDependencyParser(repo_path)
+        else:
+            logger.info('Using Python-only AST parser')
+            self.dependency_parser = DependencyParser(repo_path)
+
         self._file_contents: Dict[str, str] = {}
         self._import_graph: Dict[str, Set[str]] = defaultdict(set)
 
     def build_graph(self) -> MultiModalGraph:
         """
-        Build the complete multi-modal graph.
+        Build simplified graph focusing on essential relationships.
+        Supports multiple programming languages when tree-sitter is available.
 
         Returns:
             MultiModalGraph: The constructed graph
         """
-        logger.info('Building multi-modal graph...')
+        if self.use_multi_language:
+            logger.info('Building multi-language graph...')
+        else:
+            logger.info('Building Python-only graph...')
 
-        # Step 1: Parse AST and collect components
+        # Step 1: Parse code structure using appropriate parser
         self._parse_code_structure()
 
-        # Step 2: Extract different types of relationships
-        self._extract_import_relationships()
-        self._extract_call_relationships()
-        self._extract_inheritance_relationships()
-        self._extract_structural_relationships()
+        # Step 2: Extract only essential relationships
+        self._extract_import_relationships()  # Keep imports (essential for dependencies)
 
-        # Step 3: Compute code metrics
-        self._compute_code_metrics()
-
-        # Step 4: Classify modules
+        # Step 3: Basic classification (essential for clustering)
         self._classify_modules()
+
+        # Step 4: Log language statistics if multi-language
+        if self.use_multi_language and hasattr(self.dependency_parser, 'get_language_statistics'):
+            stats = self.dependency_parser.get_language_statistics()
+            logger.info(f'Language distribution: {stats}')
 
         logger.info(f'Built graph with {len(self.graph.nodes)} nodes and {len(self.graph.edges)} edges')
         return self.graph
 
     def _parse_code_structure(self):
-        """Parse code structure using AST parser."""
+        """Parse code structure using appropriate parser (multi-language or Python-only)."""
         logger.info('Parsing code structure...')
 
-        # Use existing AST parser
+        # Use appropriate parser
         components = self.dependency_parser.parse_repository()
 
         # Create graph nodes from components
         for component_id, component in components.items():
             # Read file content for embedding
             content = self._get_file_content(component.file_path)
+
+            # Determine file language for better classification
+            file_ext = os.path.splitext(component.file_path)[1]
+            language = self._get_language_from_extension(file_ext)
 
             # Create graph node
             node = GraphNode(
@@ -313,6 +332,9 @@ class GraphBuilder:
                 content=component.source_code or content[:1000],  # First 1000 chars for embedding
             )
 
+            # Add language-specific metadata
+            node.metadata = {'language': language, 'file_extension': file_ext}
+
             self.graph.add_node(node)
 
             # Add edges for dependencies
@@ -323,6 +345,7 @@ class GraphBuilder:
                         target=dep_id,
                         relationship_types=[RelationshipType.DEPENDENCY],
                         interaction_weight=0.5,
+                        metadata={'language': language},
                     )
                     self.graph.add_edge(edge)
 
@@ -339,9 +362,15 @@ class GraphBuilder:
         return self._file_contents[file_path]
 
     def _extract_import_relationships(self):
-        """Extract import-based relationships."""
+        """Extract import-based relationships for supported file types."""
         logger.info('Extracting import relationships...')
 
+        if self.use_multi_language:
+            # Multi-language approach - relationships already extracted in parse_repository
+            logger.info('Import relationships extracted during multi-language parsing')
+            return
+
+        # Python-only approach (existing logic)
         for file_path in self._get_python_files():
             content = self._get_file_content(file_path)
             relative_path = os.path.relpath(file_path, self.repo_path)
@@ -365,115 +394,86 @@ class GraphBuilder:
             except SyntaxError as e:
                 logger.warning(f'Syntax error in {file_path}: {e}')
 
-    def _extract_call_relationships(self):
-        """Extract function/method call relationships."""
-        logger.info('Extracting call relationships...')
+    # The following methods are disabled for simplified pipeline
+    # def _extract_call_relationships(self):
+    #     """Extract function/method call relationships - Disabled."""
+    #     pass
 
-        for file_path in self._get_python_files():
-            content = self._get_file_content(file_path)
-            relative_path = os.path.relpath(file_path, self.repo_path)
-            module_path = self._file_to_module_path(relative_path)
+    # def _extract_inheritance_relationships(self):
+    #     """Extract class inheritance relationships - Disabled."""
+    #     pass
 
-            try:
-                tree = ast.parse(content)
+    # def _extract_structural_relationships(self):
+    #     """Extract structural relationships - Disabled."""
+    #     pass
 
-                # Find function calls
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Call):
-                        if isinstance(node.func, ast.Name):
-                            # Direct function call
-                            self._analyze_function_call(module_path, node.func.id)
-
-            except SyntaxError as e:
-                logger.warning(f'Syntax error in {file_path}: {e}')
-
-    def _extract_inheritance_relationships(self):
-        """Extract class inheritance relationships."""
-        logger.info('Extracting inheritance relationships...')
-
-        for file_path in self._get_python_files():
-            content = self._get_file_content(file_path)
-            relative_path = os.path.relpath(file_path, self.repo_path)
-            module_path = self._file_to_module_path(relative_path)
-
-            try:
-                tree = ast.parse(content)
-
-                # Find class definitions with base classes
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.ClassDef) and node.bases:
-                        class_id = f'{module_path}.{node.name}'
-
-                        for base in node.bases:
-                            base_name = self._extract_base_class_name(base)
-                            if base_name:
-                                self._add_inheritance_edge(class_id, base_name)
-
-            except SyntaxError as e:
-                logger.warning(f'Syntax error in {file_path}: {e}')
-
-    def _extract_structural_relationships(self):
-        """Extract structural relationships based on file system organization."""
-        logger.info('Extracting structural relationships...')
-
-        # Group files by directory
-        directory_modules = defaultdict(list)
-
-        for node_id, node in self.graph.nodes.items():
-            directory = os.path.dirname(node.relative_path)
-            directory_modules[directory].append(node_id)
-
-        # Add structural edges between modules in the same directory
-        for directory, modules in directory_modules.items():
-            for i, module1 in enumerate(modules):
-                for module2 in modules[i + 1:]:
-                    # Add bidirectional structural relationship
-                    edge1 = GraphEdge(
-                        source=module1,
-                        target=module2,
-                        relationship_types=[RelationshipType.STRUCTURAL],
-                        interaction_weight=0.3,
-                        metadata={'shared_directory': directory},
-                    )
-                    edge2 = GraphEdge(
-                        source=module2,
-                        target=module1,
-                        relationship_types=[RelationshipType.STRUCTURAL],
-                        interaction_weight=0.3,
-                        metadata={'shared_directory': directory},
-                    )
-                    self.graph.add_edge(edge1)
-                    self.graph.add_edge(edge2)
-
-    def _compute_code_metrics(self):
-        """Compute code complexity metrics for each node."""
-        logger.info('Computing code metrics...')
-
-        for node_id, node in self.graph.nodes.items():
-            content = self._get_file_content(node.file_path)
-
-            # Lines of code
-            node.lines_of_code = len([line for line in content.split('\n') if line.strip()])
-
-            # Complexity metrics
-            node.complexity_metrics = self._calculate_complexity_metrics(content)
+    # def _compute_code_metrics(self):
+    #     """Compute code complexity metrics - Disabled."""
+    #     pass
 
     def _classify_modules(self):
-        """Classify modules by type, domain, and layer."""
+        """Simplified module classification with multi-language support."""
         logger.info('Classifying modules...')
 
         for node_id, node in self.graph.nodes.items():
-            # Module type classification
+            # Simple module type classification based on path
             node.module_type = self._classify_module_type(node)
 
-            # Domain classification
-            node.domain = self._classify_domain(node)
-
-            # Layer classification
+            # Simple layer classification
             node.layer = self._classify_layer(node)
 
-            # Semantic tags
-            node.semantic_tags = self._extract_semantic_tags(node)
+            # Simple domain classification based on directory
+            node.domain = self._classify_domain(node)
+
+    def _get_language_from_extension(self, file_ext: str) -> str:
+        """Get language name from file extension."""
+        language_map = {
+            '.py': 'python',
+            '.js': 'javascript',
+            '.ts': 'typescript',
+            '.tsx': 'typescript',
+            '.jsx': 'javascript',
+            '.java': 'java',
+            '.go': 'go',
+            '.cpp': 'cpp',
+            '.cc': 'cpp',
+            '.cxx': 'cpp',
+            '.c': 'c',
+            '.h': 'c',
+            '.hpp': 'cpp',
+            '.cs': 'csharp',
+            '.rb': 'ruby',
+            '.php': 'php',
+            '.rs': 'rust',
+            '.kt': 'kotlin',
+            '.scala': 'scala',
+        }
+        return language_map.get(file_ext.lower(), 'unknown')
+
+    def get_supported_languages(self) -> List[str]:
+        """Get list of languages detected in the repository."""
+        languages = set()
+        for node in self.graph.nodes.values():
+            if hasattr(node, 'metadata') and 'language' in node.metadata:
+                languages.add(node.metadata['language'])
+        return list(languages)
+
+    def get_language_statistics(self) -> Dict[str, Dict[str, int]]:
+        """Get detailed statistics about languages in the repository."""
+        stats = {}
+
+        for node in self.graph.nodes.values():
+            language = 'unknown'
+            if hasattr(node, 'metadata') and 'language' in node.metadata:
+                language = node.metadata['language']
+
+            if language not in stats:
+                stats[language] = {'classes': 0, 'functions': 0, 'methods': 0, 'total': 0}
+
+            stats[language][node.node_type] = stats[language].get(node.node_type, 0) + 1
+            stats[language]['total'] += 1
+
+        return stats
 
     def _get_python_files(self) -> List[str]:
         """Get all Python files in the repository."""
@@ -673,25 +673,53 @@ class GraphBuilder:
         return metrics
 
     def _classify_module_type(self, node: GraphNode) -> str:
-        """Classify module type based on patterns."""
+        """Classify module type based on patterns, with multi-language support."""
         path_lower = node.relative_path.lower()
 
-        if 'test' in path_lower:
+        # Get language for language-specific classification
+        language = 'python'  # default
+        if hasattr(node, 'metadata') and 'language' in node.metadata:
+            language = node.metadata['language']
+
+        # Common patterns across languages
+        if 'test' in path_lower or 'spec' in path_lower:
             return 'test'
         elif 'config' in path_lower or 'setting' in path_lower:
             return 'config'
         elif 'util' in path_lower or 'helper' in path_lower:
             return 'utility'
-        elif 'api' in path_lower or 'router' in path_lower or 'endpoint' in path_lower:
-            return 'interface'
-        elif 'model' in path_lower or 'schema' in path_lower:
+        elif 'model' in path_lower or 'schema' in path_lower or 'entity' in path_lower:
             return 'model'
         elif 'service' in path_lower or 'manager' in path_lower:
             return 'core'
-        elif 'infra' in path_lower or 'db' in path_lower:
+        elif 'infra' in path_lower or 'db' in path_lower or 'database' in path_lower:
             return 'infrastructure'
-        else:
-            return 'core'
+
+        # Language-specific patterns
+        if language in ['javascript', 'typescript']:
+            if 'component' in path_lower or 'page' in path_lower or 'view' in path_lower:
+                return 'interface'
+            elif 'api' in path_lower or 'router' in path_lower or 'endpoint' in path_lower or 'controller' in path_lower:
+                return 'interface'
+            elif 'hook' in path_lower or 'context' in path_lower:
+                return 'utility'
+        elif language == 'java':
+            if 'controller' in path_lower or 'rest' in path_lower:
+                return 'interface'
+            elif 'repository' in path_lower or 'dao' in path_lower:
+                return 'infrastructure'
+            elif 'dto' in path_lower or 'vo' in path_lower:
+                return 'model'
+        elif language == 'python':
+            if 'api' in path_lower or 'router' in path_lower or 'endpoint' in path_lower:
+                return 'interface'
+        elif language in ['go']:
+            if 'handler' in path_lower or 'controller' in path_lower:
+                return 'interface'
+            elif 'repo' in path_lower or 'store' in path_lower:
+                return 'infrastructure'
+
+        return 'core'
 
     def _classify_domain(self, node: GraphNode) -> str:
         """Classify domain based on directory structure and content."""

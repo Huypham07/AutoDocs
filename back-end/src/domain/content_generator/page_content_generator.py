@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from domain.rag import StructureRAG
+from domain.rag import GraphRAG
 from shared.logging import get_logger
-from shared.utils import is_github_repo
 
 from .base import BaseContentGenerator
 from .base import ContentGeneratorInput
@@ -14,7 +13,7 @@ class PageContentGenerator(BaseContentGenerator):
     def __init__(self):
         self.rag = None
 
-    def prepare_rag(self, rag: StructureRAG):
+    def prepare_rag(self, rag: GraphRAG):
         """Prepare the RAG instance for content generation."""
         self.rag = rag
 
@@ -117,8 +116,9 @@ class PageContentGenerator(BaseContentGenerator):
         - Structure the document logically for easy understanding by other developers.
         """
 
-        rag_res =  self.rag.call(
-            query=query,
+        rag_res =  self.rag.query(
+            question=query,
+            repo_url=input_data.repo_url,
         )
 
         return rag_res

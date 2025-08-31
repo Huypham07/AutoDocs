@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from .chat_rag import ChatRAG
-from .structure_rag import StructureRAG
+from .graph_rag import GraphRAG
 
-__all__ = ['StructureRAG', 'ChatRAG']
+__all__ = [
+    'ChatRAG',
+    'GraphRAG',
+]

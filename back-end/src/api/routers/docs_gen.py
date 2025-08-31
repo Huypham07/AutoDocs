@@ -15,8 +15,9 @@ router = APIRouter()
 def get_documentation_application(request: Request):
     """Dependency to get the DocumentationApplication instance."""
     documentation_application = DocumentationApplication(
-        rag=request.app.state.structure_rag,
-        architecture_preparator=request.app.state.architecture_preparator,
+        rag=request.app.state.rag,
+        pipeline_preparator=request.app.state.pipeline_preparator,
+        graph_population_service=request.app.state.graph_population_service,
         outline_generator=request.app.state.outline_generator,
         page_content_generator=request.app.state.page_content_generator,
         documentation_repository=request.app.state.documentation_repository,
