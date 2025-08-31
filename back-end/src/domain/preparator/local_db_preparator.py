@@ -28,10 +28,6 @@ from shared.settings.advanced_configs import DEFAULT_EXCLUDED_DIRS
 from shared.settings.advanced_configs import DEFAULT_EXCLUDED_FILES
 from shared.utils import extract_full_repo_name
 
-from .base import BasePreparator
-from .base import PreparatorInput
-from .base import PreparatorOutput
-
 logger = get_logger(__name__)
 
 MAX_EMBEDDING_TOKENS = 8192
@@ -55,13 +51,13 @@ def count_tokens(text: str, is_ollama_embedder: bool = True) -> int:
         return len(text) // 4
 
 
-class LocalDBPreparator(BasePreparator):
+class LocalDBPreparator():
     def __init__(self):
         self.database = None
         self.repo_url = None
         self.repo_paths = None
 
-    def prepare(self, preparator_input: PreparatorInput) -> PreparatorOutput:
+    def prepare(self, repo_url: str, access_token: Optional[str] = None) -> Optional[List[Document]]:
         """
         Prepare the database with the given repository URL and access token.
         """
@@ -69,8 +65,8 @@ class LocalDBPreparator(BasePreparator):
         self.repo_url = None
         self.repo_paths = None
 
-        self.__download_repo_into_db(preparator_input.repo_url, preparator_input.access_token)
-        return self.__prepare_index_db()
+        self.__download_repo_into_db(repo_url, access_token)
+        return self.__get_existing_db()
 
     def __download_repo(self, repo_url: str, local_path: str, access_token: Optional[str] = None) -> str:
         """
@@ -303,47 +299,6 @@ class LocalDBPreparator(BasePreparator):
         Transforms a list of documents and saves them to a local database.
         """
         # Get the data transformer
-        data_transformer = self.__prepare_data_pipeline()
-
-        # Save the documents to a local database
-        db = LocalDB()
-        db.register_transformer(transformer=data_transformer, key='split_and_embed')
-        db.load(documents)
-        db.transform(key='split_and_embed')
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        db.save_state(filepath=db_path)
-        return db
-
-    def __prepare_index_db(self) -> List[Document]:
-        """
-        Prepares the index database by reading all documents from the repository directory,
-        transforming them, and saving to the database.
-        """
-        # Check if DB exists
-        if self.repo_paths and os.path.exists(self.repo_paths['db_file']):
-            logger.info(f"Database already exists at {self.repo_paths['db_file']}. Loading existing database...")
-            try:
-                self.database = LocalDB.load_state(self.repo_paths['db_file'])
-                documents = self.database.get_transformed_data(key='split_and_embed')
-                if documents:
-                    logger.info(f'Successfully loaded {len(documents)} documents from the database.')
-                    return documents
-            except Exception as e:
-                logger.error(f'Failed to load existing database: {e}')
-                raise HTTPException(status_code=500, detail='Failed to load existing database.')
-
-        # If no existing database, create a new one
-        logger.info('No existing database found. Creating a new database...')
-        documents = self.__read_all(
-            path=self.repo_paths['repo_dir'],
-        )
-
-        self.database = self.__transform_documents_and_save_to_db(
-            documents=documents,
-            db_path=self.repo_paths['db_file'],
-        )
-
-        logger.info(f"Database created and saved at {self.repo_paths['db_file']}.")
         embedding_model_name = configs['embedder']['model_kwargs']['model']
 
         check_model_status = check_ollama_model_exists(embedding_model_name)
@@ -362,6 +317,43 @@ class LocalDBPreparator(BasePreparator):
                 status_code=500,
                 detail='An unknown error occurred while checking the Ollama model.',
             )
+        data_transformer = self.__prepare_data_pipeline()
+
+        # Save the documents to a local database
+        db = LocalDB()
+        db.register_transformer(transformer=data_transformer, key='split_and_embed')
+        db.load(documents)
+        db.transform(key='split_and_embed')
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db.save_state(filepath=db_path)
+        return db
+
+    def __get_existing_db(self) -> Optional[List[Document]]:
+        # Check if DB exists
+        if self.repo_paths and os.path.exists(self.repo_paths['db_file']):
+            logger.info(f"Database already exists at {self.repo_paths['db_file']}. Loading existing database...")
+            try:
+                self.database = LocalDB.load_state(self.repo_paths['db_file'])
+                documents = self.database.get_transformed_data(key='split_and_embed')
+                if documents:
+                    logger.info(f'Successfully loaded {len(documents)} documents from the database.')
+                    return documents
+            except Exception as e:
+                logger.error(f'Failed to load existing database: {e}')
+                return None
+        return None
+
+    def prepare_index_db(self, documents: List[Document]) -> List[Document]:
+        """
+        Prepares the index database by reading all documents from the repository directory,
+        transforming them, and saving to the database.
+        """
+        self.database = self.__transform_documents_and_save_to_db(
+            documents=documents,
+            db_path=self.repo_paths['db_file'],
+        )
+
+        logger.info(f"Database created and saved at {self.repo_paths['db_file']}.")
         transformed_docs = self.database.get_transformed_data(key='split_and_embed')
         logger.info(f'Transformed {len(transformed_docs)} documents and saved to the database.')
         return transformed_docs

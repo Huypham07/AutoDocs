@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Environment variables from .env file
     GOOGLE_API_KEY: str = Field(default='', description='Google API Key')
     MONGODB_URL: str = Field(default='', description='MongoDB connection URL')
+    OLLAMA_HOST: str = Field(default='', description='Ollama API host')
     DATABASE_NAME: str = Field(default='', description='Database name')
 
     # Environment variables from settings.yaml file

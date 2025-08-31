@@ -149,6 +149,11 @@ IMPORTANT FORMATTING RULES:
                 # Join all parts with clear separation
                 context = '\n\n' + '-' * 10 + '\n\n'.join(context_parts)
 
+            with open('rag_query.txt', 'a') as f:
+                f.write(query)
+
+            with open('rag_context.txt', 'a') as f:
+                f.write(context)
             response = self.generator.call(
                 prompt_kwargs={
                     'input_str': query,

@@ -13,7 +13,7 @@ def get_documentation_application(request: Request):
     """Dependency to get the DocumentationApplication instance."""
     documentation_application = DocumentationApplication(
         rag=request.app.state.structure_rag,
-        local_db_preparator=request.app.state.local_db_preparator,
+        architecture_preparator=request.app.state.architecture_preparator,
         outline_generator=request.app.state.outline_generator,
         page_content_generator=request.app.state.page_content_generator,
         documentation_repository=request.app.state.documentation_repository,

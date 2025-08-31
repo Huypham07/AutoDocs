@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from typing import Any
+from typing import Optional
 
 from api.models.chat import ChatRequest
 from api.models.chat import ChatResponse
 from domain.preparator import LocalDBPreparator
-from domain.preparator import PreparatorInput
 from domain.rag import ChatRAG
 
 
@@ -14,8 +14,8 @@ class ChatApplication:
         self.rag = rag
         self.local_db_preparator = local_db_preparator
 
-    def prepare(self, preparator_input: PreparatorInput):
-        transformed_docs = self.local_db_preparator.prepare(preparator_input)
+    def prepare(self, repo_url: str, access_token: Optional[str] = None):
+        transformed_docs = self.local_db_preparator.prepare(repo_url, access_token)
         self.rag.prepare_retriever(transformed_docs)
 
     async def process(self, request: ChatRequest) -> ChatResponse:
@@ -24,10 +24,8 @@ class ChatApplication:
             raise ValueError('Message cannot be empty')
 
         self.prepare(
-            PreparatorInput(
-                repo_url=request.repo_url,
-                access_token=request.access_token,
-            ),
+            repo_url=request.repo_url,
+            access_token=request.access_token,
         )
 
         response = self.rag.call(
