@@ -164,10 +164,10 @@ class MultiModalGraph:
     """
 
     def __init__(self):
-        self.nodes: Dict[str, GraphNode] = {}
-        self.edges: Dict[Tuple[str, str], GraphEdge] = {}
-        self.adjacency_list: Dict[str, List[str]] = defaultdict(list)
-        self.reverse_adjacency_list: Dict[str, List[str]] = defaultdict(list)
+        self.nodes = {}
+        self.edges = {}
+        self.adjacency_list = defaultdict(list)
+        self.reverse_adjacency_list = defaultdict(list)
 
     def add_node(self, node: GraphNode) -> None:
         """Add a node to the graph."""
@@ -550,7 +550,7 @@ class GraphBuilder:
                 edge = GraphEdge(
                     source=caller_module,
                     target=node_id,
-                    relationship_types=[RelationshipType.CALLS],
+                    relationship_types=[RelationshipType.DEPENDENCY],  # Use DEPENDENCY instead of DEPENDS_ON
                     interaction_weight=0.6,
                     call_frequency=1,
                 )

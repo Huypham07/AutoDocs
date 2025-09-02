@@ -75,14 +75,17 @@ class GraphRepository:
     def create_constraints(self):
         """Create Neo4j constraints and indexes for better performance."""
         constraints = [
-            'CREATE CONSTRAINT module_id IF NOT EXISTS FOR (m:Module) REQUIRE m.id IS UNIQUE',
-            'CREATE CONSTRAINT cluster_id IF NOT EXISTS FOR (c:Cluster) REQUIRE c.id IS UNIQUE',
-            'CREATE CONSTRAINT dataflow_id IF NOT EXISTS FOR (df:DataFlow) REQUIRE df.id IS UNIQUE',
-            'CREATE CONSTRAINT technology_id IF NOT EXISTS FOR (t:Technology) REQUIRE t.id IS UNIQUE',
-            'CREATE INDEX module_name IF NOT EXISTS FOR (m:Module) ON (m.name)',
-            'CREATE INDEX module_layer IF NOT EXISTS FOR (m:Module) ON (m.layer)',
-            'CREATE INDEX module_domain IF NOT EXISTS FOR (m:Module) ON (m.domain)',
-            'CREATE INDEX repository_url IF NOT EXISTS FOR (n) ON (n.repository_url)',
+            # Composite unique constraints để đảm bảo unique per repo
+            'CREATE CONSTRAINT module_repo_id IF NOT EXISTS FOR (m:Module) REQUIRE (m.id, m.repo_url) IS UNIQUE',
+            'CREATE CONSTRAINT cluster_repo_id IF NOT EXISTS FOR (c:Cluster) REQUIRE (c.id, c.repo_url) IS UNIQUE',
+            'CREATE CONSTRAINT dataflow_repo_id IF NOT EXISTS FOR (df:DataFlow) REQUIRE (df.id, df.repo_url) IS UNIQUE',
+            'CREATE CONSTRAINT technology_repo_id IF NOT EXISTS FOR (t:Technology) REQUIRE (t.id, t.repo_url) IS UNIQUE',
+
+            # Indexes để tăng performance
+            'CREATE INDEX module_name_repo IF NOT EXISTS FOR (m:Module) ON (m.name, m.repo_url)',
+            'CREATE INDEX module_layer_repo IF NOT EXISTS FOR (m:Module) ON (m.layer, m.repo_url)',
+            'CREATE INDEX module_domain_repo IF NOT EXISTS FOR (m:Module) ON (m.domain, m.repo_url)',
+            'CREATE INDEX repo_url_index IF NOT EXISTS FOR (n) ON (n.repo_url)',
         ]
 
         with self.connection.get_session() as session:
@@ -117,17 +120,14 @@ class GraphRepository:
         try:
             with self.connection.get_session() as session:
                 query = """
-                CREATE (m:Module {
-                    id: $id,
-                    name: $name,
-                    file_path: $file_path,
-                    lines_of_code: $lines_of_code,
-                    complexity_score: $complexity_score,
-                    layer: $layer,
-                    domain: $domain,
-                    module_type: $module_type,
-                    repo_url: $repo_url
-                })
+                MERGE (m:Module {id: $id, repo_url: $repo_url})
+                SET m.name = $name,
+                    m.file_path = $file_path,
+                    m.lines_of_code = $lines_of_code,
+                    m.complexity_score = $complexity_score,
+                    m.layer = $layer,
+                    m.domain = $domain,
+                    m.module_type = $module_type
                 RETURN m
                 """
 
@@ -154,15 +154,12 @@ class GraphRepository:
         try:
             with self.connection.get_session() as session:
                 query = """
-                CREATE (c:Cluster {
-                    id: $id,
-                    name: $name,
-                    purpose: $purpose,
-                    size: $size,
-                    cohesion: $cohesion,
-                    coupling: $coupling,
-                    repo_url: $repo_url
-                })
+                MERGE (c:Cluster {id: $id, repo_url: $repo_url})
+                SET c.name = $name,
+                    c.purpose = $purpose,
+                    c.size = $size,
+                    c.cohesion = $cohesion,
+                    c.coupling = $coupling
                 RETURN c
                 """
 
@@ -187,13 +184,10 @@ class GraphRepository:
         try:
             with self.connection.get_session() as session:
                 query = """
-                CREATE (t:Technology {
-                    id: $id,
-                    name: $name,
-                    tech_type: $tech_type,
-                    version: $version,
-                    repo_url: $repo_url
-                })
+                MERGE (t:Technology {id: $id, repo_url: $repo_url})
+                SET t.name = $name,
+                    t.tech_type = $tech_type,
+                    t.version = $version
                 RETURN t
                 """
 
@@ -274,7 +268,7 @@ class GraphRepository:
                 WHERE target.repo_url = $repo_url
                 OPTIONAL MATCH (source)-[rdep:DEPENDS_ON]->(m)
                 WHERE source.repo_url = $repo_url
-                OPTIONAL MATCH (cluster:Cluster)-[:CONTAINS]->(m)
+                OPTIONAL MATCH (m)-[:BELONGS_TO]->(cluster:Cluster)
                 WHERE cluster.repo_url = $repo_url
                 RETURN m,
                     collect(DISTINCT target.name) as dependencies,
@@ -291,14 +285,14 @@ class GraphRepository:
                         'id': module['id'],
                         'name': module['name'],
                         'file_path': module['file_path'],
-                        'layer': module['layer'],
-                        'domain': module['domain'],
-                        'module_type': module['module_type'],
-                        'complexity_score': module['complexity_score'],
-                        'lines_of_code': module['lines_of_code'],
+                        'layer': module.get('layer', 'unknown'),
+                        'domain': module.get('domain', 'unknown'),
+                        'module_type': module.get('module_type', 'unknown'),
+                        'complexity_score': module.get('complexity_score', 0.0),
+                        'lines_of_code': module.get('lines_of_code', 0),
                         'dependencies': [dep for dep in record['dependencies'] if dep],
                         'dependents': [dep for dep in record['dependents'] if dep],
-                        'cluster_name': record['cluster_name'],
+                        'cluster_name': record['cluster_name'],  # Có thể null nếu không có relationship
                     }
                 return {}
 
@@ -307,26 +301,35 @@ class GraphRepository:
             return {}
 
     def get_data_flows(self, repo_url: str, source_module: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get data flow information."""
+        """
+        Data flow analysis is simplified for AutoDocs.
+
+        Returns basic dependency relationships instead of complex data flows.
+        For detailed data flow analysis, use specialized tools.
+        """
         try:
             with self.connection.get_session() as session:
                 if source_module:
+                    # Use DEPENDS_ON relationships as proxy for data flows
                     query = """
                     MATCH (source:Module {name: $source_module, repo_url: $repo_url})
-                    MATCH (source)-[:FLOWS_TO]->(target)
+                    MATCH (source)-[:DEPENDS_ON]->(target)
                     WHERE target.repo_url = $repo_url
                     RETURN source.name as source_name,
                         target.name as target_name,
-                        'direct' as flow_type
+                        'dependency' as flow_type
+                    LIMIT 20
                     """
                     result = session.run(query, source_module=source_module, repo_url=repo_url)
                 else:
+                    # Basic dependency-based flow overview
                     query = """
-                    MATCH (source:Module)-[:FLOWS_TO]->(target:Module)
+                    MATCH (source:Module)-[:DEPENDS_ON]->(target:Module)
                     WHERE source.repo_url = $repo_url AND target.repo_url = $repo_url
                     RETURN source.name as source_name,
                         target.name as target_name,
-                        'direct' as flow_type
+                        'dependency' as flow_type
+                    LIMIT 50
                     """
                     result = session.run(query, repo_url=repo_url)
 
@@ -338,10 +341,11 @@ class GraphRepository:
                         'flow_type': record['flow_type'],
                     })
 
+                logger.debug(f'Found {len(flows)} dependency flows for {repo_url}')
                 return flows
 
         except Exception as e:
-            logger.error(f'Error getting data flows: {e}')
+            logger.warning(f'Error getting data flows (using fallback): {e}')
             return []
 
     def get_cluster_analysis(self, repo_url: str, cluster_name: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -352,42 +356,72 @@ class GraphRepository:
                     query = """
                     MATCH (c:Cluster {name: $cluster_name, repo_url: $repo_url})
                     OPTIONAL MATCH (c)-[:CONTAINS]->(m:Module)
+                    WHERE m.repo_url = $repo_url
                     OPTIONAL MATCH (m)-[ext:DEPENDS_ON]->(external)
-                    WHERE NOT (c)-[:CONTAINS]->(external) AND external.repo_url = $repo_url
+                    WHERE NOT exists((c)-[:CONTAINS]->(external)) AND external.repo_url = $repo_url
+                    WITH c, collect(DISTINCT m.name) as modules, collect(DISTINCT external.name) as external_deps
                     RETURN c,
-                        collect(DISTINCT m.name) as modules,
-                        collect(DISTINCT external.name) as external_dependencies,
-                        count(DISTINCT m) as module_count
+                        modules,
+                        external_deps,
+                        size(modules) as module_count
                     """
                     result = session.run(query, cluster_name=cluster_name, repo_url=repo_url)
                 else:
                     query = """
-                    MATCH (c:Cluster)
-                    WHERE c.repo_url = $repo_url
+                    MATCH (c:Cluster {repo_url: $repo_url})
                     OPTIONAL MATCH (c)-[:CONTAINS]->(m:Module)
+                    WHERE m.repo_url = $repo_url
                     OPTIONAL MATCH (m)-[ext:DEPENDS_ON]->(external)
-                    WHERE NOT (c)-[:CONTAINS]->(external) AND external.repo_url = $repo_url
+                    WHERE NOT exists((c)-[:CONTAINS]->(external)) AND external.repo_url = $repo_url
+                    WITH c, collect(DISTINCT m.name) as modules, collect(DISTINCT external.name) as external_deps
                     RETURN c,
-                        collect(DISTINCT m.name) as modules,
-                        collect(DISTINCT external.name) as external_dependencies,
-                        count(DISTINCT m) as module_count
+                        modules,
+                        external_deps,
+                        size(modules) as module_count
                     """
                     result = session.run(query, repo_url=repo_url)
 
                 clusters = []
-                for record in result:
-                    cluster = record['c']
-                    clusters.append({
-                        'id': cluster['id'],
-                        'name': cluster['name'],
-                        'purpose': cluster['purpose'],
-                        'size': record['module_count'],
-                        'modules': [mod for mod in record['modules'] if mod],
-                        'external_dependencies': [dep for dep in record['external_dependencies'] if dep],
-                        'cohesion': cluster['cohesion'],
-                        'coupling': cluster['coupling'],
-                    })
+                has_results = False
 
+                for record in result:
+                    has_results = True
+                    cluster = record['c']
+                    if cluster:
+                        clusters.append({
+                            'id': cluster.get('id', cluster.get('name', 'unknown')),
+                            'name': cluster.get('name', 'Unknown Cluster'),
+                            'purpose': cluster.get('purpose', 'No description available'),
+                            'size': record['module_count'],
+                            'modules': record['modules'] or [],
+                            'external_dependencies': record['external_deps'] or [],
+                            'cohesion': cluster.get('cohesion', 0.0),
+                            'coupling': cluster.get('coupling', 0.0),
+                        })
+
+                # Fallback: If no clusters or relationships found, create virtual cluster
+                if not has_results or not clusters:
+                    fallback_query = """
+                    MATCH (m:Module {repo_url: $repo_url})
+                    OPTIONAL MATCH (m)-[:DEPENDS_ON]->(dep:Module {repo_url: $repo_url})
+                    RETURN count(DISTINCT m) as total_modules,
+                           collect(DISTINCT m.name) as all_modules,
+                           count(DISTINCT dep) as total_dependencies
+                    """
+                    fallback_result = session.run(fallback_query, repo_url=repo_url)
+                    fallback_record = fallback_result.single()
+
+                    if fallback_record and fallback_record['total_modules'] > 0:
+                        clusters = [{
+                            'id': 'system-overview',
+                            'name': 'System Overview',
+                            'purpose': 'All modules in the system (clustering not available)',
+                            'size': fallback_record['total_modules'],
+                            'modules': fallback_record['all_modules'] or [],
+                            'external_dependencies': [],
+                            'cohesion': 0.0,
+                            'coupling': 0.0,
+                        }]
                 return clusters
 
         except Exception as e:
@@ -416,91 +450,113 @@ class GraphRepository:
             return {}
 
     def get_communication_patterns(self, repo_url: str, module_name: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get communication patterns between modules."""
+        """
+        Communication pattern analysis is simplified for AutoDocs.
+
+        Returns basic dependency relationships as communication patterns.
+        For detailed communication analysis, use specialized tools.
+        """
         try:
             with self.connection.get_session() as session:
                 if module_name:
+                    # Use DEPENDS_ON relationships as proxy for communication
                     query = """
-                    MATCH (source:Module {repo_url: $repo_url})-[comm:COMMUNICATES_WITH]->(target:Module {repo_url: $repo_url})
+                    MATCH (source:Module {repo_url: $repo_url})-[:DEPENDS_ON]->(target:Module {repo_url: $repo_url})
                     WHERE source.name = $module_name OR target.name = $module_name
                     RETURN source.name as source_module,
                         target.name as target_module,
-                        comm.pattern_type as communication_type,
-                        comm.protocol as protocol,
-                        comm.frequency as frequency
+                        'dependency' as communication_type,
+                        'internal' as protocol,
+                        'static' as frequency
+                    LIMIT 20
                     """
                     result = session.run(query, repo_url=repo_url, module_name=module_name)
                 else:
-                    result = session.run(CypherQueries.COMMUNICATION_PATTERNS, repo_url=repo_url, target_module=None)
+                    # Basic dependency overview as communication patterns
+                    query = """
+                    MATCH (source:Module {repo_url: $repo_url})-[:DEPENDS_ON]->(target:Module {repo_url: $repo_url})
+                    RETURN source.name as source_module,
+                        target.name as target_module,
+                        'dependency' as communication_type,
+                        'internal' as protocol,
+                        'static' as frequency
+                    LIMIT 30
+                    """
+                    result = session.run(query, repo_url=repo_url)
 
                 patterns = []
                 for record in result:
-                    if 'pattern' in record:
-                        pattern = record['pattern']
-                        patterns.append({
-                            'source_module': pattern['source_module'],
-                            'target_module': pattern['target_module'],
-                            'communication_type': pattern['communication_type'],
-                            'protocol': pattern['protocol'],
-                            'frequency': pattern['frequency'],
-                        })
-                    else:
-                        patterns.append({
-                            'source_module': record['source_module'],
-                            'target_module': record['target_module'],
-                            'communication_type': record['communication_type'],
-                            'protocol': record['protocol'],
-                            'frequency': record['frequency'],
-                        })
+                    patterns.append({
+                        'source_module': record['source_module'],
+                        'target_module': record['target_module'],
+                        'communication_type': record['communication_type'],
+                        'protocol': record['protocol'],
+                        'frequency': record['frequency'],
+                    })
 
+                logger.debug(f'Found {len(patterns)} dependency patterns for {repo_url}')
                 return patterns
 
         except Exception as e:
-            logger.error(f'Error getting communication patterns: {e}')
+            logger.warning(f'Error getting communication patterns (using fallback): {e}')
             return []
 
-    def get_circular_dependencies(self, repo_url: str) -> List[Tuple[str, str]]:
-        """Find circular dependencies in the system."""
-        try:
-            with self.connection.get_session() as session:
-                result = session.run(CypherQueries.CIRCULAR_DEPENDENCIES, repo_url=repo_url)
+    def get_circular_dependencies(self, repo_url: str, max_depth: int = 5) -> List[Tuple[str, str]]:
+        """
+        Circular dependency detection is disabled for AutoDocs.
 
-                circular_deps = []
-                for record in result:
-                    circular_deps.append((record['module1'], record['module2']))
-
-                return circular_deps
-
-        except Exception as e:
-            logger.error(f'Error getting circular dependencies: {e}')
-            return []
+        This feature is not relevant for documentation generation and
+        significantly impacts performance. For code quality analysis,
+        use dedicated tools like pylint, flake8, or SonarQube.
+        """
+        logger.debug(f'Circular dependency check not applicable for documentation system (repo: {repo_url})')
+        return []
 
     def get_high_coupling_modules(self, repo_url: str, threshold: int = 5) -> List[Dict[str, Any]]:
-        """Get modules with high coupling (many dependencies)."""
+        """
+        High coupling analysis is disabled for AutoDocs.
+
+        This feature is more suitable for code quality tools rather than
+        documentation generation systems.
+        """
+        logger.debug(f'High coupling analysis not applicable for documentation system (repo: {repo_url})')
+        return []
+
+    def get_all_modules(self, repo_url: str) -> List[Dict[str, Any]]:
+        """Get all modules in the repository."""
+        query = """
+        MATCH (m:Module {repo_url: $repo_url})
+        OPTIONAL MATCH (m)-[:BELONGS_TO]->(c:Cluster)
+        WHERE c.repo_url = $repo_url
+        RETURN m.name as name,
+               m.file_path as file_path,
+               m.layer as layer,
+               m.domain as domain,
+               m.module_type as module_type,
+               m.complexity_score as complexity_score,
+               m.lines_of_code as lines_of_code,
+               c.name as cluster_name
+        ORDER BY m.name
+        """
+
         try:
             with self.connection.get_session() as session:
-                result = session.run(CypherQueries.HIGH_COUPLING_MODULES, repo_url=repo_url)
+                result = session.run(query, repo_url=repo_url)
+                modules = []
 
-                high_coupling = []
                 for record in result:
-                    if 'high_coupling_module' in record:
-                        module = record['high_coupling_module']
-                        high_coupling.append({
-                            'module_name': module['module_name'],
-                            'outgoing_dependencies': module['outgoing_dependencies'],
-                            'incoming_dependencies': module['incoming_dependencies'],
-                            'total_coupling': module['total_coupling'],
-                        })
-                    else:
-                        high_coupling.append({
-                            'module_name': record['module_name'],
-                            'outgoing_dependencies': record['outgoing'],
-                            'incoming_dependencies': record['incoming'],
-                            'total_coupling': record['total_coupling'],
-                        })
-
-                return high_coupling
+                    modules.append({
+                        'name': record['name'],
+                        'file_path': record['file_path'],
+                        'layer': record['layer'] or 'unknown',
+                        'domain': record['domain'] or 'unknown',
+                        'module_type': record['module_type'] or 'unknown',
+                        'complexity_score': record['complexity_score'] or 0.0,
+                        'lines_of_code': record['lines_of_code'] or 0,
+                        'cluster_name': record['cluster_name'],  # Có thể null nếu không có relationship
+                    })
+                return modules
 
         except Exception as e:
-            logger.error(f'Error getting high coupling modules: {e}')
+            logger.error(f'Error getting all modules: {e}')
             return []

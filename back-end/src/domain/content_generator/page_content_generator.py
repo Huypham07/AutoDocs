@@ -30,7 +30,10 @@ class PageContentGenerator(BaseContentGenerator):
             raise ValueError('RAG instance is not prepared.')
         page = input_data.page
 
-        query = rf"""Your task is to generate a comprehensive and accurate technical documentation page in Markdown format about a specific feature, system, or module within a given software project.
+        question = rf"""Generate comprehensive technical documentation for the page: "{page.page_title}"
+
+        Generate in English with proper markdown formatting.
+        Your task is to generate a comprehensive and accurate technical documentation page in Markdown format about a specific feature, system, or module within a given software project.
 
         You will be given:
         1. The "[DOCUMENTATION_PAGE_TOPIC]" for the page you need to create.
@@ -39,7 +42,6 @@ class PageContentGenerator(BaseContentGenerator):
         CRITICAL STARTING INSTRUCTION:
 
         The very first thing on the page MUST be the main title of the page should be a H1 Markdown heading: \`# {page.page_title}\`.
-        Based ONLY on the content of the \`[RELEVANT_SOURCE_FILES]\`:
 
         1.  **Introduction:**
             *   Provide a concise overview (1-2 paragraphs) explaining the purpose, scope, and high-level role of "{page.page_title}" within the overall system.
@@ -107,18 +109,13 @@ class PageContentGenerator(BaseContentGenerator):
 
         9.  **Conclusion/Summary:** End with a brief summary paragraph if appropriate for "{page.page_title}", reiterating the key aspects covered and their significance within the project.
 
-        Remember:
-        - Generate the content in English
-        - Ground every claim in the provided source files.
-        - Do not generate too much whitespace or empty lines if not needed, such as: "you are writing        a documentation page".
-        - Prioritize accuracy and direct representation of the code's functionality and structure.
-        - All fenced code blocks (e.g., html, mermaid, bash, code, etc.) must be properly closed with a matching triple backtick (), even if the content is short. Partial or unclosed code blocks are strictly not allowed.
-        - Structure the document logically for easy understanding by other developers.
         """
 
-        rag_res =  self.rag.query(
-            question=query,
+        rag_res = self.rag.query(
+            question=question,
             repo_url=input_data.repo_url,
+            query_type='page_content_generation',
+            target=page.page_title,
         )
 
         return rag_res

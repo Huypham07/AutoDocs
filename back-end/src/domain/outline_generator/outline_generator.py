@@ -88,7 +88,7 @@ class OutlineGenerator(BaseOutlineGenerator):
         except Exception as e:
             logger.warning(f'Could not fetch README.md, continuing with empty README: {str(e)}')
 
-        query = rf"""Analyze this {platform} repository {owner}/{repo_name} and create a documentation structure for it.
+        question = rf"""Analyze this {platform} repository {owner}/{repo_name} and create a documentation structure for it.
         1. The complete file tree of the project:
         <file_tree>
         {file_tree_data}
@@ -107,7 +107,7 @@ class OutlineGenerator(BaseOutlineGenerator):
         - Component relationships
         - Process workflows
         - State machines
-        - Class hierarchies
+        - Class hierarchies (if applicable)
 
         Create a documentation structure with the following main sections:
         - Overview (general information about the project)
@@ -153,27 +153,30 @@ class OutlineGenerator(BaseOutlineGenerator):
             </pages>
         </documentation_structure>
 
-        IMPORTANT FORMATTING INSTRUCTIONS:
-        - Have exactly one <sections> node containing all top-level <section> elements.
-        - Have exactly one <pages> node containing all <page> elements.
-        - All <page_ref> used inside <section> must match one of the defined <page> IDs.
-        - Return ONLY the valid XML structure specified above
-        - DO NOT wrap the XML in markdown code blocks (no \`\`\` or \`\`\`xml)
-        - DO NOT include any explanation text before or after the XML
-        - Ensure the XML is properly formatted and valid
-        - REMEMBER the ids of sections and pages need include an ordinal number (e.g., "section-1", "page-1").
-        - Start directly with <documentation_structure> and end with </documentation_structure>
+        **CRITICAL XML FORMATTING REQUIREMENTS:**
+        - Return ONLY valid, well-formed XML - no markdown code blocks, no explanations
+        - Start directly with <documentation_structure> tag
+        - End directly with </documentation_structure> tag
+        - Ensure all opening tags have matching closing tags
+        - Use proper XML escaping for special characters (&lt; &gt; &amp; &quot; &#39;)
+        - Use consistent indentation (4 spaces per level)
+        - All sections must have unique IDs (section-1, section-2, etc.)
+        - All pages must have unique IDs (page-1, page-2, etc.)
+        - All page_ref elements must reference existing page IDs
+        - Include exactly one <sections> container and one <pages> container
+        - Each section should have 2-4 pages maximum
+        - Create 6-10 sections total with 15-25 pages total
+        - File paths should be realistic and match the actual repository structure
+        - Escape any special characters in titles and descriptions
 
-        IMPORTANT:
-        1. Create 8-12 pages that would make a comprehensive documentation for this repository
-        2. Each page should focus on a specific aspect of the codebase (e.g., architecture, key features, setup)
-        3. The relevant_files should be actual files from the repository that would be used to generate that page
-        4. Return ONLY valid XML with the structure specified above, with no markdown code block delimiters
+        Remember: The XML must be parseable by standard XML parsers. Any syntax errors will cause processing to fail.
+
         """
 
         rag_res = self.rag.query(
-            question=query,
+            question=question,
             repo_url=repo_url,
+            query_type='outline_generation',
         )
 
         return rag_res

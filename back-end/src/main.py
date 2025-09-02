@@ -8,7 +8,6 @@ from domain.content_generator import PageContentGenerator
 from domain.outline_generator import OutlineGenerator
 from domain.preparator import PipelineConfig
 from domain.preparator import PipelinePreparator
-from domain.rag import ChatRAG
 from fastapi import FastAPI
 from infra.graph_factory import GraphRepositoryFactory
 from infra.mongo.core import close_mongo_connection
@@ -33,7 +32,6 @@ async def lifespan(app: FastAPI):
 
     app.state.rag = GraphRepositoryFactory.create_langchain_rag()
     app.state.graph_population_service = GraphRepositoryFactory.create_population_service()
-    app.state.chat_rag = ChatRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
 
     # Create architecture pipeline preparator with configuration
     pipeline_config = PipelineConfig(
