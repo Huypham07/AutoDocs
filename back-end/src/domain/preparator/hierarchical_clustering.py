@@ -1,12 +1,3 @@
-"""
-Hierarchical clustering module for grouping related modules into logical clusters.
-
-This module implements multiple clustering approaches:
-- Community detection on dependency graph
-- Semantic clustering using embeddings
-- Directory-based clustering
-- Consensus clustering
-"""
 from __future__ import annotations
 
 import json
@@ -29,7 +20,6 @@ from shared.logging import get_logger
 from .graph_builder import GraphEdge
 from .graph_builder import GraphNode
 from .graph_builder import MultiModalGraph
-from .graph_enhancer import GraphEnhancer
 
 logger = get_logger(__name__)
 

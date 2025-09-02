@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from datetime import timezone
 from typing import Optional
@@ -118,21 +119,47 @@ class DocumentationApplication:
             self.prepare(repo_url=repo_url, access_token=access_token)
             logger.info('Generating documentation...')
 
-            outline = self.outline_generator.generate(
-                OutlineGeneratorInput(
-                    repo_url=repo_url,
-                    access_token=access_token,
-                    owner=owner,
-                    repo_name=repo_name,
-                ),
-            )
+            # Generate outline with simple retry mechanism
+            outline_xml = None
+            for attempt in range(2):  # Try 2 times (original + 1 retry)
+                try:
+                    logger.info(f'Generating outline (attempt {attempt + 1}/2)...')
 
-            xml_match = re.search(r'<documentation_structure>.*?</documentation_structure>', outline, re.DOTALL)
-            if not xml_match:
-                logger.error('No valid documentation structure found in the outline.')
-                raise ValueError('No valid documentation structure found in the outline.')
+                    outline = self.outline_generator.generate(
+                        OutlineGeneratorInput(
+                            repo_url=repo_url,
+                            access_token=access_token,
+                            owner=owner,
+                            repo_name=repo_name,
+                        ),
+                    )
 
-            outline_xml = xml_match.group(0)
+                    xml_match = re.search(r'<documentation_structure>.*?</documentation_structure>', outline, re.DOTALL)
+                    if not xml_match:
+                        logger.warning(f'No valid XML structure found in attempt {attempt + 1}')
+                        if attempt == 1:  # Last attempt
+                            raise ValueError('No valid documentation structure found after retry.')
+                        continue
+
+                    outline_xml = xml_match.group(0)
+
+                    # Quick XML validation
+                    try:
+                        ET.fromstring(outline_xml)
+                        logger.info(f'Valid outline generated on attempt {attempt + 1}')
+                        break  # Success, exit retry loop
+                    except ET.ParseError as parse_error:
+                        logger.warning(f'XML parsing error in attempt {attempt + 1}: {parse_error}')
+                        if attempt == 1:  # Last attempt
+                            raise ValueError(f'Generated XML is invalid after retry: {parse_error}')
+
+                except Exception as e:
+                    logger.error(f'Error in outline generation attempt {attempt + 1}: {e}')
+                    if attempt == 1:  # Last attempt
+                        raise
+
+            if not outline_xml:
+                raise ValueError('Failed to generate valid outline after retry.')
 
             structure = parse_structure_from_xml(outline_xml)
             pages = get_pages_from_structure(structure)

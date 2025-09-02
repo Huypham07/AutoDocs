@@ -106,8 +106,11 @@ class CypherQueries:
     MODULE_DETAILS = """
     MATCH (m:Module {name: $module_name, repo_url: $repo_url})
     OPTIONAL MATCH (m)-[r1:DEPENDS_ON]->(dep:Module)
+    WHERE dep.repo_url = $repo_url
     OPTIONAL MATCH (dependent:Module)-[r2:DEPENDS_ON]->(m)
+    WHERE dependent.repo_url = $repo_url
     OPTIONAL MATCH (m)-[:BELONGS_TO]->(c:Cluster)
+    WHERE c.repo_url = $repo_url
     RETURN {
         name: m.name,
         file_path: m.file_path,
@@ -124,7 +127,7 @@ class CypherQueries:
 
     # Data Flows
     DATA_FLOWS = """
-    MATCH (source:Module {repo_url: $repo_url})-[r:DATA_FLOW]->(target:Module)
+    MATCH (source:Module {repo_url: $repo_url})-[r:DATA_FLOW]->(target:Module {repo_url: $repo_url})
     WHERE ($target_module IS NULL OR source.name = $target_module OR target.name = $target_module)
     RETURN {
         source: source.name,
@@ -138,8 +141,9 @@ class CypherQueries:
     MATCH (c:Cluster {repo_url: $repo_url})
     WHERE ($cluster_name IS NULL OR c.name = $cluster_name)
     OPTIONAL MATCH (c)-[:CONTAINS]->(m:Module)
+    WHERE m.repo_url = $repo_url
     OPTIONAL MATCH (m)-[:DEPENDS_ON]->(external:Module)
-    WHERE NOT (external)-[:BELONGS_TO]->(c)
+    WHERE NOT exists((c)-[:CONTAINS]->(external)) AND external.repo_url = $repo_url
     RETURN {
         name: c.name,
         purpose: c.purpose,
@@ -159,7 +163,7 @@ class CypherQueries:
 
     # Communication Patterns
     COMMUNICATION_PATTERNS = """
-    MATCH (source:Module {repo_url: $repo_url})-[r:COMMUNICATES]->(target:Module)
+    MATCH (source:Module {repo_url: $repo_url})-[r:COMMUNICATES]->(target:Module {repo_url: $repo_url})
     WHERE ($target_module IS NULL OR source.name = $target_module OR target.name = $target_module)
     RETURN {
         source_module: source.name,
@@ -172,15 +176,16 @@ class CypherQueries:
 
     # Circular Dependencies
     CIRCULAR_DEPENDENCIES = """
-    MATCH (m1:Module {repo_url: $repo_url})-[:DEPENDS_ON*2..]->(m1)
-    RETURN DISTINCT m1.name as module1, m1.name as module2
+    MATCH (m1:Module {repo_url: $repo_url})-[:DEPENDS_ON*2..]->(m2:Module {repo_url: $repo_url})
+    WHERE m1.name = m2.name
+    RETURN DISTINCT m1.name as module1, m2.name as module2
     """
 
     # High Coupling Modules
     HIGH_COUPLING_MODULES = """
     MATCH (m:Module {repo_url: $repo_url})
-    OPTIONAL MATCH (m)-[r1:DEPENDS_ON]->(out:Module)
-    OPTIONAL MATCH (in:Module)-[r2:DEPENDS_ON]->(m)
+    OPTIONAL MATCH (m)-[r1:DEPENDS_ON]->(out:Module {repo_url: $repo_url})
+    OPTIONAL MATCH (in:Module {repo_url: $repo_url})-[r2:DEPENDS_ON]->(m)
     WITH m,
          COUNT(DISTINCT out) as outgoing_dependencies,
          COUNT(DISTINCT in) as incoming_dependencies,

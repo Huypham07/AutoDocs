@@ -313,7 +313,7 @@ class GraphPopulationService:
         type_mapping = {
             'imports': RelationshipType.IMPORTS.value,
             'import': RelationshipType.IMPORTS.value,
-            'calls': RelationshipType.CALLS.value,
+            'calls': RelationshipType.DEPENDS_ON.value,  # Map calls to depends_on for simplicity
             'depends': RelationshipType.DEPENDS_ON.value,
             'depends_on': RelationshipType.DEPENDS_ON.value,
             'dependency': RelationshipType.DEPENDS_ON.value,
@@ -321,10 +321,10 @@ class GraphPopulationService:
             'inheritance': RelationshipType.INHERITS.value,
             'contains': RelationshipType.CONTAINS.value,
             'uses': RelationshipType.USES.value,
-            'implements': RelationshipType.IMPLEMENTS.value,
-            'communicates': RelationshipType.COMMUNICATES.value,
-            'flows': RelationshipType.DATA_FLOW.value,
-            'data_flow': RelationshipType.DATA_FLOW.value,
+            'implements': RelationshipType.DEPENDS_ON.value,  # Map implements to depends_on for simplicity
+            'communicates': RelationshipType.DEPENDS_ON.value,  # Map communicates to depends_on for simplicity
+            'flows': RelationshipType.DEPENDS_ON.value,  # Map data flows to depends_on for simplicity
+            'data_flow': RelationshipType.DEPENDS_ON.value,
             'semantic': RelationshipType.DEPENDS_ON.value,
             'structural': RelationshipType.DEPENDS_ON.value,
             'composes': RelationshipType.CONTAINS.value,

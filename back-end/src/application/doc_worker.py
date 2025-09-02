@@ -7,9 +7,9 @@ import sys
 from application.documentation import DocumentationApplication
 from domain.content_generator import PageContentGenerator
 from domain.outline_generator import OutlineGenerator
-from domain.preparator import ArchitecturePipelinePreparator
 from domain.preparator import PipelineConfig
-from domain.rag import StructureRAG
+from domain.preparator import PipelinePreparator
+from infra.graph_factory import GraphRepositoryFactory
 from infra.mongo.core import close_mongo_connection
 from infra.mongo.core import connect_to_mongo
 from infra.mongo.documentation_repository import DocumentationRepository
@@ -34,9 +34,12 @@ class DocumentationWorker:
         try:
             logger.info('Setting up documentation worker...')
             await connect_to_mongo()
-            # Initialize all dependencies (similar to your FastAPI app setup)
+
+            # Initialize services using factory pattern (like in main.py)
+            rag = GraphRepositoryFactory.create_langchain_rag()
+            graph_population_service = GraphRepositoryFactory.create_population_service()
+
             documentation_repository = DocumentationRepository()
-            rag = StructureRAG(provider='google', model='gemini-2.5-flash-lite-preview-06-17')
 
             # Create architecture pipeline preparator with configuration
             pipeline_config = PipelineConfig(
@@ -45,7 +48,7 @@ class DocumentationWorker:
                 save_intermediate_results=False,  # Don't save intermediate files in worker
                 output_directory='worker_pipeline_output',
             )
-            architecture_preparator = ArchitecturePipelinePreparator(pipeline_config)
+            pipeline_preparator = PipelinePreparator(pipeline_config)
 
             outline_generator = OutlineGenerator()
             page_content_generator = PageContentGenerator()
@@ -53,10 +56,11 @@ class DocumentationWorker:
             # Create DocumentationApplication (without rabbitmq_publisher for worker)
             self.documentation_app = DocumentationApplication(
                 rag=rag,
-                architecture_preparator=architecture_preparator,
+                pipeline_preparator=pipeline_preparator,
                 outline_generator=outline_generator,
                 page_content_generator=page_content_generator,
                 documentation_repository=documentation_repository,
+                graph_population_service=graph_population_service,
                 rabbitmq_publisher=None,
             )
 

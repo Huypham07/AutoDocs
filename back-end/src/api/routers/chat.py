@@ -14,7 +14,7 @@ router = APIRouter()
 def get_chat_application(request: Request):
     """Dependency to get the ChatApplication instance."""
     chat_application = ChatApplication(
-        rag=request.app.state.chat_rag,
+        rag=request.app.state.rag,
     )
     return chat_application
 

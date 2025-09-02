@@ -4,21 +4,23 @@ from dataclasses import dataclass
 from dataclasses import field
 from typing import Any
 from typing import Dict
-from typing import Optional
 
-import adalflow as adal
 from api.models.docs_gen import Section
 from api.models.docs_gen import Structure
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
 from shared.logging import get_logger
-from shared.settings.advanced_configs import get_generator_model_config
+from shared.utils import get_settings
 
 from .base import BaseEvaluator
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 
 @dataclass
-class HelpfulnessScore(adal.DataClass):
+class HelpfulnessScore:
     """Data class to hold helpfulness evaluation results"""
     goal_clarity: float = field(default=0.0)
     conciseness: float = field(default=0.0)
@@ -27,26 +29,15 @@ class HelpfulnessScore(adal.DataClass):
     repo_type_alignment: float = field(default=0.0)
     reasoning: str = field(default='')
 
-    __output_fields__ = [
-        'goal_clarity',
-        'conciseness',
-        'technical_depth',
-        'diagram_completeness',
-        'repo_type_alignment',
-        'reasoning',
-    ]
-
 
 EVALUATION_TEMPLATE = """
-You are an expert documentation evaluator. Your task is to assess the helpfulness of technical documentation for a software repository.
-
 <DOCUMENTATION_STRUCTURE>
-Repository: {{repo_name}}
-Title: {{title}}
-Description: {{description}}
+Repository: {repo_name}
+Title: {title}
+Description: {description}
 
 Sections and Pages:
-{{sections_content}}
+{sections_content}
 </DOCUMENTATION_STRUCTURE>
 
 <EVALUATION_CRITERIA>
@@ -95,14 +86,14 @@ Evaluate the documentation helpfulness across these 5 dimensions (each scored 0-
 <OUTPUT_FORMAT>
 Provide your evaluation in this exact JSON format:
 
-{
+{{
   "goal_clarity": <score_0_to_10>,
   "conciseness": <score_0_to_10>,
   "technical_depth": <score_0_to_10>,
   "diagram_completeness": <score_0_to_10>,
   "repo_type_alignment": <score_0_to_10>,
   "reasoning": "<detailed_explanation_of_scores>"
-}
+}}
 </OUTPUT_FORMAT>
 
 Evaluate the documentation thoroughly and provide specific reasoning for each score.
@@ -121,23 +112,37 @@ class HelpfulnessEvaluator(BaseEvaluator):
     - Repo type alignment: Is the documentation appropriate for the repository type?
     """
 
-    def __init__(self, provider: str, model: Optional[str] = None):
+    def __init__(self, model_name: str = 'gemini-2.5-flash-lite-preview-06-17'):
         super().__init__(
             name='Helpfulness Evaluator',
             description='Evaluates the helpfulness of the documentation using LLM-as-Judge approach.',
         )
 
-        generator_config = get_generator_model_config(provider, model)
+        # Initialize Google Generative AI model
+        try:
+            google_api_key = settings.GOOGLE_API_KEY
+            self.llm = ChatGoogleGenerativeAI(
+                model=model_name,
+                temperature=0.1,
+                google_api_key=google_api_key,
+                convert_system_message_to_human=True,
+            )
+            logger.info(f'Using Google Gemini model: {model_name}')
+        except Exception as e:
+            logger.error(f'Error initializing Google Gemini model: {e}')
+            raise
 
-        data_parser = adal.DataClassParser(data_class=HelpfulnessScore, return_data_class=True)
+        # Setup JSON output parser
+        self.output_parser = JsonOutputParser()
 
-        # Initialize the generator with evaluation prompt
-        self.judge_generator = adal.Generator(
-            model_client=generator_config['model_client'](),
-            model_kwargs=generator_config['model_kwargs'],
-            template=EVALUATION_TEMPLATE,
-            output_processors=data_parser,
-        )
+        # Create prompt template
+        self.prompt_template = ChatPromptTemplate.from_messages([
+            ('system', 'You are an expert documentation evaluator. Your task is to assess the helpfulness of technical documentation for a software repository.'),
+            ('human', EVALUATION_TEMPLATE),
+        ])
+
+        # Create the evaluation chain
+        self.evaluation_chain = self.prompt_template | self.llm | self.output_parser
 
     def _extract_sections_content(self, structure: Structure) -> str:
         """Extract and format sections content for evaluation"""
@@ -145,17 +150,17 @@ class HelpfulnessEvaluator(BaseEvaluator):
 
         def process_section(section: Section, level: int = 0) -> None:
             indent = '  ' * level
-            content_parts.append(f"{indent}Section: {section.section_title}")
+            content_parts.append(f'{indent}Section: {section.section_title}')
 
             # Add pages content
             for page in section.pages:
-                content_parts.append(f"{indent}  Page: {page.page_title}")
+                content_parts.append(f'{indent}  Page: {page.page_title}')
                 if page.content and page.content.strip():
                     # Truncate very long content
                     content = page.content.strip()
                     if len(content) > 500:
                         content = content[:500] + '...'
-                    content_parts.append(f"{indent}    Content: {content}")
+                    content_parts.append(f'{indent}    Content: {content}')
 
                 if page.file_paths:
                     content_parts.append(f"{indent}    Files: {', '.join(page.file_paths)}")
@@ -183,45 +188,51 @@ class HelpfulnessEvaluator(BaseEvaluator):
             # Prepare input data for the LLM judge
             sections_content = self._extract_sections_content(structure)
 
-            # Generate evaluation using LLM-as-Judge
-            evaluation_result = self.judge_generator.call(
-                prompt_kwargs={
-                    'repo_name': structure.repo_name or 'Unknown Repository',
-                    'title': structure.title,
-                    'description': structure.description,
-                    'sections_content': sections_content,
-                },
-            ).data
+            # Generate evaluation using LangChain
+            evaluation_result = self.evaluation_chain.invoke({
+                'repo_name': structure.repo_name or 'Unknown Repository',
+                'title': structure.title,
+                'description': structure.description,
+                'sections_content': sections_content,
+            })
 
-            if not isinstance(evaluation_result, HelpfulnessScore):
-                raise ValueError('Evaluation result is not in the expected format.')
+            # Parse the result as HelpfulnessScore
+            score_data = HelpfulnessScore(
+                goal_clarity=evaluation_result.get('goal_clarity', 0.0),
+                conciseness=evaluation_result.get('conciseness', 0.0),
+                technical_depth=evaluation_result.get('technical_depth', 0.0),
+                diagram_completeness=evaluation_result.get('diagram_completeness', 0.0),
+                repo_type_alignment=evaluation_result.get('repo_type_alignment', 0.0),
+                reasoning=evaluation_result.get('reasoning', ''),
+            )
 
             # Store detailed results for debugging/analysis
-            self._detailed_results = evaluation_result
-            print(type(evaluation_result))
+            self._detailed_results = score_data
 
-            goal_clarity = evaluation_result.goal_clarity
-            conciseness = evaluation_result.conciseness
-            technical_depth = evaluation_result.technical_depth
-            diagram_completeness = evaluation_result.diagram_completeness
-            repo_type_alignment = evaluation_result.repo_type_alignment
+            goal_clarity = score_data.goal_clarity
+            conciseness = score_data.conciseness
+            technical_depth = score_data.technical_depth
+            diagram_completeness = score_data.diagram_completeness
+            repo_type_alignment = score_data.repo_type_alignment
 
             overall_score = sum([goal_clarity, conciseness, technical_depth, diagram_completeness, repo_type_alignment]) / 5 / 10.0
             # Update the score
             self.score = overall_score
 
-            logger.info(f"Helpfulness evaluation completed. Score: {self.score:.3f}")
-            logger.debug(f"Detailed scores: "
-                         f"Goal clarity: {evaluation_result.goal_clarity:.3f}, "
-                         f"Conciseness: {evaluation_result.conciseness:.3f}, "
-                         f"Technical depth: {evaluation_result.technical_depth:.3f}, "
-                         f"Diagram completeness: {evaluation_result.diagram_completeness:.3f}, "
-                         f"Repo type alignment: {evaluation_result.repo_type_alignment:.3f}")
+            logger.info(f'Helpfulness evaluation completed. Score: {self.score:.3f}')
+            logger.debug(
+                f'Detailed scores: '
+                f'Goal clarity: {score_data.goal_clarity:.3f}, '
+                f'Conciseness: {score_data.conciseness:.3f}, '
+                f'Technical depth: {score_data.technical_depth:.3f}, '
+                f'Diagram completeness: {score_data.diagram_completeness:.3f}, '
+                f'Repo type alignment: {score_data.repo_type_alignment:.3f}',
+            )
 
             return self.score
 
         except Exception as e:
-            logger.error(f"Error during helpfulness evaluation: {e}")
+            logger.error(f'Error during helpfulness evaluation: {e}')
             self.score = 0.0
             return self.score
 
