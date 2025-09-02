@@ -416,77 +416,154 @@ The codebase includes the following module types:
         page_type = self._analyze_page_type(target_page)
         logger.info(f"Detected page type for '{target_page}': {page_type}")
 
-        # Get context based on page type
+        # Get context based on page type - COMPREHENSIVE data collection
         try:
             if page_type == 'architecture_overview':
-                # Architecture pages need: overview + clusters + high-level flows
+                # Architecture pages need: overview + clusters + high-level flows + tech stack
                 overview = self.graph_repo.get_system_overview(query.repo_url)
                 clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
+                tech_stack = self.graph_repo.get_technology_stack(query.repo_url)
+                dataflows = self.graph_repo.get_data_flows(query.repo_url)
+                dependencies = self.graph_repo.get_circular_dependencies(query.repo_url)
+
                 if overview:
                     context_data['system_overview'] = overview
                 if clusters:
                     context_data['clusters'] = clusters
+                if tech_stack:
+                    context_data['technology_stack'] = tech_stack
+                if dataflows:
+                    context_data['dataflows'] = dataflows[:15]  # Show more flows for architecture
+                if dependencies:
+                    context_data['dependencies'] = dependencies
 
             elif page_type == 'technology_integration':
-                # Integration/API pages need: tech stack + communication patterns + some flows
+                # Integration/API pages need: tech stack + communication patterns + flows + modules
                 tech_stack = self.graph_repo.get_technology_stack(query.repo_url)
                 patterns = self.graph_repo.get_communication_patterns(query.repo_url)
+                dataflows = self.graph_repo.get_data_flows(query.repo_url)
+                clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
+                overview = self.graph_repo.get_system_overview(query.repo_url)
+
                 if tech_stack:
                     context_data['technology_stack'] = tech_stack
                 if patterns:
                     context_data['communication_patterns'] = patterns
-                # Add limited dataflows for integration context
-                dataflows = self.graph_repo.get_data_flows(query.repo_url)
                 if dataflows:
-                    context_data['dataflows'] = dataflows[:10]  # Limit to 10 most relevant
+                    context_data['dataflows'] = dataflows  # Full dataflows for integration
+                if clusters:
+                    context_data['clusters'] = clusters
+                if overview:
+                    context_data['system_overview'] = overview
 
             elif page_type == 'data_flow':
-                # Data flow pages need: full dataflows + related communication patterns
+                # Data flow pages need: full dataflows + communication patterns + related clusters
                 dataflows = self.graph_repo.get_data_flows(query.repo_url)
                 patterns = self.graph_repo.get_communication_patterns(query.repo_url)
+                clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
+                overview = self.graph_repo.get_system_overview(query.repo_url)
+                tech_stack = self.graph_repo.get_technology_stack(query.repo_url)
+
                 if dataflows:
                     context_data['dataflows'] = dataflows
                 if patterns:
                     context_data['communication_patterns'] = patterns
+                if clusters:
+                    context_data['clusters'] = clusters
+                if overview:
+                    context_data['system_overview'] = overview
+                if tech_stack:
+                    context_data['technology_stack'] = tech_stack
 
             elif page_type == 'component_cluster':
-                # Component pages need: specific cluster details + modules + dependencies
+                # Component pages need: specific cluster details + ALL modules + dependencies + flows
                 cluster_info = self._find_relevant_cluster(target_page, query.repo_url)
+                clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
+                dataflows = self.graph_repo.get_data_flows(query.repo_url)
+                patterns = self.graph_repo.get_communication_patterns(query.repo_url)
+                dependencies = self.graph_repo.get_circular_dependencies(query.repo_url)
+                tech_stack = self.graph_repo.get_technology_stack(query.repo_url)
+
                 if cluster_info:
-                    context_data['specific_cluster'] = cluster_info
-                    context_data['clusters'] = [cluster_info]  # Just this cluster
+                    # Get enhanced details for the specific cluster
+                    enhanced_cluster = self._get_enhanced_cluster_details(cluster_info.get('name', ''), query.repo_url)
+                    context_data['specific_cluster'] = enhanced_cluster or cluster_info
+                    context_data['clusters'] = [enhanced_cluster or cluster_info]
                 else:
-                    # Fallback to all clusters if can't find specific one
-                    clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
-                    if clusters:
-                        context_data['clusters'] = clusters[:3]  # Limit to 3 most relevant
+                    # Fallback to all clusters
+                    context_data['clusters'] = clusters
+
+                if dataflows:
+                    context_data['dataflows'] = dataflows
+                if patterns:
+                    context_data['communication_patterns'] = patterns
+                if dependencies:
+                    context_data['dependencies'] = dependencies
+                if tech_stack:
+                    context_data['technology_stack'] = tech_stack
 
             elif page_type == 'deployment_infrastructure':
-                # Deployment pages need: tech stack + basic overview
+                # Deployment pages need: tech stack + overview + infrastructure-related flows
                 tech_stack = self.graph_repo.get_technology_stack(query.repo_url)
                 overview = self.graph_repo.get_system_overview(query.repo_url)
+                clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
+                patterns = self.graph_repo.get_communication_patterns(query.repo_url)
+                dataflows = self.graph_repo.get_data_flows(query.repo_url)
+
                 if tech_stack:
                     context_data['technology_stack'] = tech_stack
                 if overview:
                     context_data['system_overview'] = overview
-
-            elif page_type == 'feature_functionality':
-                # Feature pages need: related clusters + some communication patterns
-                clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
-                patterns = self.graph_repo.get_communication_patterns(query.repo_url)
                 if clusters:
                     context_data['clusters'] = clusters
                 if patterns:
-                    context_data['communication_patterns'] = patterns[:5]  # Limit patterns
+                    context_data['communication_patterns'] = patterns
+                if dataflows:
+                    context_data['dataflows'] = dataflows
 
-            else:  # fallback or general
-                # General pages get basic overview + limited context
+            elif page_type == 'feature_functionality':
+                # Feature pages need: related clusters + communication patterns + related flows + modules
+                clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
+                patterns = self.graph_repo.get_communication_patterns(query.repo_url)
+                dataflows = self.graph_repo.get_data_flows(query.repo_url)
                 overview = self.graph_repo.get_system_overview(query.repo_url)
                 tech_stack = self.graph_repo.get_technology_stack(query.repo_url)
+                dependencies = self.graph_repo.get_circular_dependencies(query.repo_url)
+
+                if clusters:
+                    context_data['clusters'] = clusters
+                if patterns:
+                    context_data['communication_patterns'] = patterns
+                if dataflows:
+                    context_data['dataflows'] = dataflows
                 if overview:
                     context_data['system_overview'] = overview
                 if tech_stack:
                     context_data['technology_stack'] = tech_stack
+                if dependencies:
+                    context_data['dependencies'] = dependencies
+
+            else:  # fallback or general
+                # Default: comprehensive data for any unrecognized page type
+                overview = self.graph_repo.get_system_overview(query.repo_url)
+                clusters = self.graph_repo.get_cluster_analysis(query.repo_url)
+                tech_stack = self.graph_repo.get_technology_stack(query.repo_url)
+                dataflows = self.graph_repo.get_data_flows(query.repo_url)
+                patterns = self.graph_repo.get_communication_patterns(query.repo_url)
+                dependencies = self.graph_repo.get_circular_dependencies(query.repo_url)
+
+                if overview:
+                    context_data['system_overview'] = overview
+                if clusters:
+                    context_data['clusters'] = clusters
+                if tech_stack:
+                    context_data['technology_stack'] = tech_stack
+                if dataflows:
+                    context_data['dataflows'] = dataflows
+                if patterns:
+                    context_data['communication_patterns'] = patterns
+                if dependencies:
+                    context_data['dependencies'] = dependencies
 
         except Exception as e:
             logger.warning(f'Error getting focused context for {page_type}: {e}')
@@ -944,39 +1021,141 @@ Respond with ONLY the page type (one of the 6 options above):
             narrative += '### General Content Guidelines\n'
             narrative += '\n**Focus**: Broad overview with balanced coverage of architecture and implementation\n\n'
 
-        # Add specific context sections based on available data
+        # Add specific context sections based on available data - DETAILED INFORMATION
         if 'system_overview' in context_data:
             overview = context_data['system_overview']
             narrative += '### System Overview Context\n'
             narrative += f"- Total Modules: {overview.get('total_modules', 0)}\n"
             narrative += f"- Logical Clusters: {overview.get('total_clusters', 0)}\n"
             if overview.get('domains'):
-                narrative += f"- Functional Domains: {', '.join(overview.get('domains', [])[:3])}\n"
+                narrative += f"- Functional Domains: {', '.join(overview.get('domains', []))}\n"
+            if overview.get('layers'):
+                narrative += f"- Architectural Layers: {', '.join(overview.get('layers', []))}\n"
+            if overview.get('module_types'):
+                narrative += f"- Module Types: {', '.join(overview.get('module_types', [])[:5])}\n"
             narrative += '\n'
 
         if 'clusters' in context_data:
             clusters = context_data['clusters']
             narrative += f'### Cluster Context ({len(clusters)} clusters)\n'
-            for cluster in clusters[:3]:  # Show first 3
-                narrative += f"- **{cluster.get('name', 'Unknown')}**: {cluster.get('purpose', 'No description')}\n"
-            narrative += '\n'
+            for i, cluster in enumerate(clusters[:5]):  # Show first 5 clusters
+                narrative += f"**Cluster {i+1}: {cluster.get('name', 'Unknown')}**\n"
+                narrative += f"- Purpose: {cluster.get('purpose', 'No description')}\n"
+                narrative += f"- Size: {cluster.get('size', 0)} modules\n"
+                if cluster.get('domain'):
+                    narrative += f"- Domain: {cluster.get('domain')}\n"
+                if cluster.get('layer'):
+                    narrative += f"- Layer: {cluster.get('layer')}\n"
+
+                # Add module information if available
+                if 'modules' in cluster and cluster['modules']:
+                    modules = cluster['modules']
+                    narrative += f'- Key Modules ({len(modules)} total):\n'
+                    for mod in modules[:3]:  # Show top 3 modules
+                        narrative += f"  - `{mod.get('name', 'Unknown')}` ({mod.get('module_type', 'Unknown type')})\n"
+                    if len(modules) > 3:
+                        narrative += f'  *... and {len(modules) - 3} more modules*\n'
+                narrative += '\n'
+
+            if len(clusters) > 5:
+                narrative += f'*... and {len(clusters) - 5} more clusters*\n\n'
 
         if 'technology_stack' in context_data:
             tech_stack = context_data['technology_stack']
             narrative += '### Technology Context\n'
-            for tech_type, technologies in list(tech_stack.items())[:3]:  # First 3 categories
-                narrative += f"- **{tech_type.title()}**: {', '.join(technologies[:2])}\n"
+            for tech_type, technologies in tech_stack.items():
+                narrative += f"- **{tech_type.title()}**: {', '.join(technologies)}\n"
             narrative += '\n'
 
-        # Add generation instructions
+        if 'dataflows' in context_data:
+            flows = context_data['dataflows']
+            narrative += f'### Data Flow Context ({len(flows)} flows)\n'
+
+            # Group flows by type for better organization
+            page_flow_types: Dict[str, List[Dict[str, Any]]] = {}
+            for flow in flows:
+                flow_type = flow.get('flow_type', 'Unknown')
+                if flow_type not in page_flow_types:
+                    page_flow_types[flow_type] = []
+                page_flow_types[flow_type].append(flow)
+
+            for flow_type, type_flows in page_flow_types.items():
+                narrative += f"**{flow_type.replace('_', ' ').title()} Flows** ({len(type_flows)} flows):\n"
+                for flow in type_flows[:3]:  # Show top 3 flows per type
+                    source = flow.get('source_module', flow.get('source', 'Unknown'))
+                    target = flow.get('target_module', flow.get('target', 'Unknown'))
+                    narrative += f'- `{source}` → `{target}`\n'
+                    if flow.get('data_type'):
+                        narrative += f"  Data: {flow.get('data_type')}\n"
+                    if flow.get('description'):
+                        narrative += f"  Description: {flow.get('description')}\n"
+
+                if len(type_flows) > 3:
+                    narrative += f'*... and {len(type_flows) - 3} more {flow_type} flows*\n'
+                narrative += '\n'
+
+        if 'communication_patterns' in context_data:
+            patterns = context_data['communication_patterns']
+            narrative += f'### Communication Patterns ({len(patterns)} patterns)\n'
+
+            # Group patterns by type
+            pattern_types: Dict[str, List[Dict[str, Any]]] = {}
+            for pattern in patterns:
+                pattern_type = pattern.get('communication_type', pattern.get('pattern_type', 'Unknown'))
+                if pattern_type not in pattern_types:
+                    pattern_types[pattern_type] = []
+                pattern_types[pattern_type].append(pattern)
+
+            for pattern_type, type_patterns in pattern_types.items():
+                narrative += f"**{pattern_type.replace('_', ' ').title()} Communication** ({len(type_patterns)} patterns):\n"
+                for pattern in type_patterns[:3]:  # Show top 3 patterns per type
+                    source = pattern.get('source_module', pattern.get('source_component', 'Unknown'))
+                    target = pattern.get('target_module', pattern.get('target_component', 'Unknown'))
+                    narrative += f'- `{source}` → `{target}`\n'
+                    if pattern.get('protocol'):
+                        narrative += f"  Protocol: {pattern.get('protocol')}\n"
+                    if pattern.get('frequency'):
+                        narrative += f"  Frequency: {pattern.get('frequency')}\n"
+
+                if len(type_patterns) > 3:
+                    narrative += f'*... and {len(type_patterns) - 3} more {pattern_type} patterns*\n'
+                narrative += '\n'
+
+        if 'dependencies' in context_data:
+            dependencies = context_data['dependencies']
+            narrative += '### Dependency Context\n'
+            if dependencies:
+                narrative += f'**Circular Dependencies Found**: {len(dependencies)} problematic dependency cycles\n'
+                for dep1, dep2 in dependencies[:3]:  # Show first 3 circular dependencies
+                    narrative += f'- `{dep1}` ↔ `{dep2}`\n'
+                if len(dependencies) > 3:
+                    narrative += f'*... and {len(dependencies) - 3} more circular dependencies*\n'
+            else:
+                narrative += '**No circular dependencies detected** - Clean dependency structure\n'
+            narrative += '\n'
+
+        # Enhanced generation instructions for comprehensive content
         narrative += '### Content Generation Instructions\n'
         narrative += f"1. Create content specifically for a '{page_type}' type page\n"
-        narrative += "2. Use only the provided context - don't include irrelevant information\n"
+        narrative += '2. Use ALL the provided context above - leverage the detailed information\n'
         narrative += f"3. Focus on the architectural aspects most relevant to '{target_page}'\n"
-        narrative += '4. Include specific technical details from the context\n'
-        narrative += '5. Structure content with clear H2/H3 headings\n'
-        narrative += '6. Add Mermaid diagrams when they enhance understanding\n'
+        narrative += '4. Include specific technical details from ALL context sections\n'
+        narrative += '5. Structure content with clear H2/H3 headings for each major component\n'
+        narrative += '6. Add Mermaid diagrams to visualize:\n'
+        narrative += '   - Component relationships (flowchart TD)\n'
+        narrative += '   - Data flows between modules (sequenceDiagram)\n'
+        narrative += '   - Cluster organization (flowchart TD)\n'
+        narrative += '   - Communication patterns (sequenceDiagram)\n'
         narrative += '7. Reference specific components and relationships from the graph data\n'
+        narrative += '8. Create comprehensive tables summarizing:\n'
+        narrative += '   - Key modules and their responsibilities\n'
+        narrative += '   - Technology stack and usage\n'
+        narrative += '   - Communication protocols and patterns\n'
+        narrative += '   - Data flow types and descriptions\n'
+        narrative += '9. Include source file citations from the relevant modules and components\n'
+        narrative += f"10. Write in-depth content suitable for '{page_type}' documentation\n"
+        narrative += '11. Use the cluster, dataflow, and communication information to create detailed sections\n'
+        narrative += '12. Ensure comprehensive coverage by utilizing ALL available context data\n'
 
         return narrative
 
